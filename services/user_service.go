@@ -1,0 +1,113 @@
+package services
+
+import (
+	"doAnHTTT_go/config"
+	"doAnHTTT_go/models"
+	"doAnHTTT_go/utils"
+	"errors"
+)
+
+func GetAllStaffs(page int, pageSize int, search string) (map[string]interface{}, error) {
+	var userList []models.User
+	var totalRecords int64
+
+	query := config.DB.Model(&models.User{}).Where("role = ?", "STAFF")
+	if search != "" {
+		searchKeyword := "%" + search + "%"
+		query = query.Where("full_name LIKE ? OR phone LIKE ? OR email LIKE ?", searchKeyword, searchKeyword, searchKeyword)
+	}
+
+	query.Count(&totalRecords)
+
+	pageCount := utils.GetPageCount(totalRecords, pageSize)
+	offset := utils.GetOffset(page, pageSize)
+
+	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&userList)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return map[string]interface{}{
+		"recordCount": totalRecords,
+		"pageCount":   pageCount,
+		"currentPage": page,
+		"pageSize":    pageSize,
+		"records":     userList,
+	}, nil
+}
+
+func UpdateStaffs(userID uint, updatedData map[string]interface{}) error {
+	var user models.User
+
+	errFind := config.DB.First(&user, userID).Error
+	if errFind != nil {
+		return errors.New("không tìm thấy dữ liệu nhân viên cần sửa")
+	}
+
+	errUpdate := config.DB.Model(&user).Updates(updatedData).Error
+	if errUpdate != nil {
+		return errors.New("lỗi khi cập nhật thông tin nhân viên")
+	}
+
+	return nil
+}
+
+func DeleteUser(userID uint) error {
+	var user models.User
+
+	errFind := config.DB.First(&user, userID).Error
+	if errFind != nil {
+		return errors.New("không tìm thấy dữ liệu nhân viên cần xóa")
+	}
+
+	errDelete := config.DB.Delete(&user).Error
+	if errDelete != nil {
+		return errors.New("lỗi khi xóa nhân viên khỏi hệ thống")
+	}
+
+	return nil
+}
+
+func GetMyProfile(userID uint) (map[string]interface{}, error) {
+	var user models.User
+
+	// Tìm user theo ID
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		return nil, errors.New("không tìm thấy thông tin tài khoản")
+	}
+
+	// Chỉ trả về các trường cần thiết cho Profile (Không trả về PasswordHash)
+	profileData := map[string]interface{}{
+		"id":         user.ID,
+		"full_name":  user.FullName,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"cccd":       user.CCCD,
+		"role":       user.Role,
+		"avatar":     user.Avatar,
+		"created_at": user.CreatedAt,
+	}
+
+	return profileData, nil
+}
+
+func UpdateMyProfile(userID uint, updateData map[string]interface{}) error {
+	var user models.User
+
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		return errors.New("không tìm thấy tài khoản để cập nhật")
+	}
+
+	delete(updateData, "id")
+	delete(updateData, "role")
+	delete(updateData, "email")
+	delete(updateData, "password_hash")
+	delete(updateData, "is_first_login")
+	delete(updateData, "status")
+
+	if err := config.DB.Model(&user).Updates(updateData).Error; err != nil {
+		return errors.New("lỗi khi cập nhật thông tin cá nhân")
+	}
+
+	return nil
+}

@@ -5,6 +5,7 @@ import (
 	"doAnHTTT_go/controllers"
 	"doAnHTTT_go/middlewares"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -17,9 +18,9 @@ func main() {
 	config.ConnectDatabase()
 	router := gin.Default()
 
-	// CẤU HÌNH CORS CHO PHÉP ANGULAR (Cổng 4200) KẾT NỐI ĐẾN GOLANG (Cổng 8080)
+	// 1. CẤU HÌNH CORS CHO PHÉP MỌI DOMAIN (Cần thiết khi đưa lên Vercel)
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:4200"}, // Đổi thành domain thực tế sau này
+		AllowAllOrigins:  true, // Thay đổi ở đây: Mở cửa cho Vercel gọi API
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -27,9 +28,7 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// =====================================================================
 	// NHÓM 1: XÁC THỰC (Không cần Token)
-	// =====================================================================
 	authRoutes := router.Group("/api/auth")
 	{
 		authRoutes.POST("/register", controllers.RegisterOwnerHandler)
@@ -40,14 +39,11 @@ func main() {
 		authRoutes.POST("/refresh", controllers.RefreshTokenHandler)
 	}
 
-	// =====================================================================
 	// NHÓM 2: QUYỀN CỦA CHỦ TRỌ (OWNER)
-	// (Đảm nhận các thao tác Xóa nhạy cảm và Thêm/Sửa Cấu hình hệ thống)
-	// =====================================================================
 	ownerRoutes := router.Group("/api/admin")
 	ownerRoutes.Use(middlewares.RequireRole("OWNER"))
 	{
-		// 1. Quản lý Nhà, Phòng, Dịch vụ (Thêm, Sửa, Xóa)
+		// ... (Toàn bộ các route của Admin giữ nguyên) ...
 		ownerRoutes.POST("/houses", controllers.CreateHouseHandler)
 		ownerRoutes.PUT("/houses/:id", controllers.UpdateHouseHandler)
 		ownerRoutes.DELETE("/houses/:id", controllers.DeleteHouseHandler)
@@ -62,36 +58,28 @@ func main() {
 		ownerRoutes.PUT("/services/:id", controllers.UpdateServiceHandler)
 		ownerRoutes.DELETE("/services/:id", controllers.DeleteServiceHandler)
 
-		// 2. Tài khoản nhân viên (OWNER được Thêm, Sửa, Xóa)
 		ownerRoutes.GET("/users", controllers.GetAllUserHandler)
 		ownerRoutes.POST("/users", controllers.CreateUserHandler)
 		ownerRoutes.PUT("/users/:id", controllers.UpdateUserHandler)
 		ownerRoutes.DELETE("/users/:id", controllers.DeleteUserHandler)
 
-		// 3. Khách thuê (Chỉ OWNER được Xóa)
 		ownerRoutes.DELETE("/tenants/:id", controllers.DeleteTenantHandler)
 
-		// 4. Phiếu Thu/Chi (Chỉ OWNER được Sửa, Xóa)
 		ownerRoutes.PUT("/transactions/:id", controllers.UpdateTransactionHandler)
 		ownerRoutes.DELETE("/transactions/:id", controllers.DeleteTransactionHandler)
 
-		// 5. Báo cáo Lời Lỗ (Chỉ OWNER được xem)
 		ownerRoutes.GET("/reports/profit-loss", controllers.GetProfitLossHandler)
 	}
 
-	// =====================================================================
 	// NHÓM 3: QUYỀN CHUNG (OWNER & STAFF)
-	// (Vận hành hàng ngày, nhập liệu cơ bản)
-	// =====================================================================
 	generalRoutes := router.Group("/api/general")
 	generalRoutes.Use(middlewares.RequireRole("OWNER", "STAFF"))
 	{
-		// 1. Xem danh sách Nhà, Phòng, Dịch vụ (STAFF chỉ được Xem)
+		// ... (Toàn bộ các route của General giữ nguyên) ...
 		generalRoutes.GET("/houses", controllers.GetAllHousesHandler)
 		generalRoutes.GET("/rooms", controllers.GetAllRoomHandler)
 		generalRoutes.GET("/services", controllers.GetAllServiceHandler)
 
-		// 2. Khách & Hợp đồng (STAFF được Thêm, Sửa)
 		generalRoutes.GET("/tenants", controllers.GetAllTenantHandler)
 		generalRoutes.POST("/tenants", controllers.CreateTenantHandler)
 		generalRoutes.PUT("/tenants/:id", controllers.UpdateTenantHandler)
@@ -102,37 +90,36 @@ func main() {
 
 		generalRoutes.GET("/rooms/:id/services", controllers.GetServicesOfRoomHandler)
 
-		// 3. Công việc/Sự cố (Ai cũng được cập nhật)
 		generalRoutes.GET("/tasks", controllers.GetAllTaskHandler)
 		generalRoutes.POST("/tasks", controllers.CreateTaskHandler)
 		generalRoutes.PUT("/tasks/:id", controllers.UpdateTaskHandler)
 		generalRoutes.DELETE("/tasks/:id", controllers.DeleteTaskHandler)
 
-		// 4. Chỉ số Điện/Nước (STAFF được Thêm, Sửa - Logic khóa tháng cũ nằm ở Service)
 		generalRoutes.POST("/meter-readings", controllers.AddMeterReadingHandler)
 		generalRoutes.GET("/meter-readings", controllers.GetMeterReadingsHandler)
 		generalRoutes.PUT("/meter-readings/:id", controllers.UpdateMeterReadingHandler)
 		generalRoutes.DELETE("/meter-readings/:id", controllers.DeleteMeterReadingHandler)
 
-		// 5. Hóa Đơn & Thanh toán (STAFF được Khởi tạo và Thu tiền)
 		generalRoutes.GET("/invoices", controllers.GetAllInvoicesHandler)
 		generalRoutes.POST("/invoices/generate", controllers.TriggerGenerateInvoices)
 		generalRoutes.POST("/invoices/pay", controllers.PayInvoiceHandler)
 		generalRoutes.DELETE("/invoices/:id", controllers.DeleteInvoiceHandler)
 
-		// 6. Phiếu Thu/Chi (STAFF chỉ được Thêm)
 		generalRoutes.GET("/transactions", controllers.GetAllTransactionsHandler)
 		generalRoutes.POST("/transactions", controllers.AddTransactionHandler)
 
-		// =====================================================================
-		// 7. Profile (Thông tin cá nhân)
-		// =====================================================================
 		generalRoutes.GET("/profile/me", controllers.GetMyProfileHandler)
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
 	}
 
-	log.Println("Server đang chạy tại http://localhost:8080")
-	errRun := router.Run(":8080")
+	// 2. CHẠY SERVER BẰNG PORT ĐỘNG (Xóa đoạn cứng 8080 đi)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Dự phòng chạy localhost
+	}
+
+	log.Printf("Server đang chạy tại cổng %s", port)
+	errRun := router.Run(":" + port)
 
 	if errRun != nil {
 		log.Fatalf("Lỗi khi khởi chạy server: %v", errRun)

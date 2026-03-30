@@ -16,17 +16,26 @@ import (
 func main() {
 	godotenv.Load()
 	config.ConnectDatabase()
+
 	router := gin.Default()
 
-	// 1. CẤU HÌNH CORS CHO PHÉP MỌI DOMAIN (Cần thiết khi đưa lên Vercel)
+	// 1. CẤU HÌNH CORS (PHẢI ĐẶT TRÊN CÙNG ĐỂ ÁP DỤNG CHO TOÀN BỘ API)
 	router.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true, // Thay đổi ở đây: Mở cửa cho Vercel gọi API
+		AllowAllOrigins:  true, // Mở cửa cho Vercel gọi API
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// 2. HEALTH CHECK API (Dành cho UptimeRobot)
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"message": "Hệ thống đang hoạt động",
+		})
+	})
 
 	// NHÓM 1: XÁC THỰC (Không cần Token)
 	authRoutes := router.Group("/api/auth")
@@ -43,7 +52,6 @@ func main() {
 	ownerRoutes := router.Group("/api/admin")
 	ownerRoutes.Use(middlewares.RequireRole("OWNER"))
 	{
-		// ... (Toàn bộ các route của Admin giữ nguyên) ...
 		ownerRoutes.POST("/houses", controllers.CreateHouseHandler)
 		ownerRoutes.PUT("/houses/:id", controllers.UpdateHouseHandler)
 		ownerRoutes.DELETE("/houses/:id", controllers.DeleteHouseHandler)
@@ -75,7 +83,6 @@ func main() {
 	generalRoutes := router.Group("/api/general")
 	generalRoutes.Use(middlewares.RequireRole("OWNER", "STAFF"))
 	{
-		// ... (Toàn bộ các route của General giữ nguyên) ...
 		generalRoutes.GET("/houses", controllers.GetAllHousesHandler)
 		generalRoutes.GET("/rooms", controllers.GetAllRoomHandler)
 		generalRoutes.GET("/services", controllers.GetAllServiceHandler)
@@ -112,7 +119,7 @@ func main() {
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
 	}
 
-	// 2. CHẠY SERVER BẰNG PORT ĐỘNG (Xóa đoạn cứng 8080 đi)
+	// 3. CHẠY SERVER BẰNG PORT ĐỘNG
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080" // Dự phòng chạy localhost

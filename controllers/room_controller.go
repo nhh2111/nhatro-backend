@@ -13,8 +13,18 @@ import (
 func GetAllRoomHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
+	houseIdStr := ginContext.Query("house_id") // Bắt thêm tham số house_id
 
-	resultData, err := services.GetAllRoom(page, pageSize, search)
+	var houseId uint
+	if houseIdStr != "" {
+		id, err := strconv.Atoi(houseIdStr)
+		if err == nil {
+			houseId = uint(id)
+		}
+	}
+
+	// Truyền thêm houseId vào service
+	resultData, err := services.GetAllRooms(page, pageSize, search, houseId)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách phòng: "+err.Error())

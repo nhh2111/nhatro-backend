@@ -7,15 +7,22 @@ import (
 	"errors"
 )
 
-func GetAllRoom(page int, pageSize int, search string) (map[string]interface{}, error) {
+// Thêm tham số houseId uint vào hàm
+func GetAllRooms(page int, pageSize int, search string, houseId uint) (map[string]interface{}, error) {
 	var roomList []models.Room
 	var totalRecords int64
 
 	query := config.DB.Model(&models.Room{})
 
+	// Lọc theo từ khóa (Số phòng)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("room_number LIKE ?", searchKeyword)
+		query = query.Where("room_number LIKE ? OR description LIKE ?", searchKeyword, searchKeyword)
+	}
+
+	// Lọc theo ID nhà (Nếu có truyền lên)
+	if houseId > 0 {
+		query = query.Where("house_id = ?", houseId)
 	}
 
 	query.Count(&totalRecords)
@@ -26,12 +33,6 @@ func GetAllRoom(page int, pageSize int, search string) (map[string]interface{}, 
 	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&roomList)
 	if result.Error != nil {
 		return nil, result.Error
-	}
-
-	for i := range roomList {
-		var count int64
-		config.DB.Model(&models.Contract{}).Where("room_id = ? AND status = ?", roomList[i].ID, "ACTIVE").Count(&count)
-		roomList[i].CurrentOccupants = int(count)
 	}
 
 	return map[string]interface{}{

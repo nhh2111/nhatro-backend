@@ -19,7 +19,17 @@ func GetAllHouses(page int, pageSize int, search string) (map[string]interface{}
 	countQuery.Count(&totalRecords)
 
 	query := config.DB.Table("houses").
-		Select("houses.*, COUNT(rooms.id) as total_rooms, COALESCE(SUM(CASE WHEN rooms.status = 'EMPTY' THEN 1 ELSE 0 END), 0) as empty_rooms").
+		Select(`houses.*, 
+			COUNT(DISTINCT rooms.id) as total_rooms, 
+			COALESCE(SUM(
+				CASE 
+					WHEN rooms.status = 'AVAILABLE' THEN 1 
+					WHEN rooms.status = 'OCCUPIED' AND (
+						SELECT COUNT(id) FROM contracts WHERE contracts.room_id = rooms.id AND contracts.status = 'ACTIVE'
+					) < rooms.max_occupants THEN 1 
+					ELSE 0 
+				END
+			), 0) as empty_rooms`).
 		Joins("LEFT JOIN rooms ON rooms.house_id = houses.id").
 		Group("houses.id")
 

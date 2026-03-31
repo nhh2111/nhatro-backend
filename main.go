@@ -29,7 +29,7 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	router.GET("/", func(c *gin.Context) {
+	router.GET("/health", func(c *gin.Context) {
 		sqlDB, err := config.DB.DB()
 		dbStatus := "connected"
 

@@ -11,19 +11,27 @@ func GetAllHouses(page int, pageSize int, search string) (map[string]interface{}
 	var houseList []models.House
 	var totalRecords int64
 
-	query := config.DB.Model(&models.House{})
+	countQuery := config.DB.Model(&models.House{})
+	if search != "" {
+		searchKeyword := "%" + search + "%"
+		countQuery = countQuery.Where("name LIKE ? OR address LIKE ? OR ward LIKE ? OR district LIKE ? OR city LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+	}
+	countQuery.Count(&totalRecords)
+
+	query := config.DB.Table("houses").
+		Select("houses.*, COUNT(rooms.id) as total_rooms, COALESCE(SUM(CASE WHEN rooms.status = 'EMPTY' THEN 1 ELSE 0 END), 0) as empty_rooms").
+		Joins("LEFT JOIN rooms ON rooms.house_id = houses.id").
+		Group("houses.id")
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("name LIKE ? OR address LIKE ? OR ward LIKE ? OR district LIKE ? OR city LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+		query = query.Where("houses.name LIKE ? OR houses.address LIKE ? OR houses.ward LIKE ? OR houses.district LIKE ? OR houses.city LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
 	}
-
-	query.Count(&totalRecords)
 
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&houseList)
+	result := query.Offset(offset).Limit(pageSize).Order("houses.id DESC").Find(&houseList)
 	if result.Error != nil {
 		return nil, result.Error
 	}

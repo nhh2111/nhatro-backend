@@ -29,14 +29,20 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// 2. HEALTH CHECK API (Dành cho UptimeRobot)
 	router.GET("/", func(c *gin.Context) {
+		sqlDB, err := config.DB.DB()
+		dbStatus := "connected"
+
+		if err != nil || sqlDB.Ping() != nil {
+			dbStatus = "disconnected"
+		}
+
 		c.JSON(200, gin.H{
-			"status":  "ok",
-			"message": "Hệ thống đang hoạt động",
+			"status":   "ok",
+			"database": dbStatus,
+			"message":  "Hệ thống đang hoạt động",
 		})
 	})
-
 	// NHÓM 1: XÁC THỰC (Không cần Token)
 	authRoutes := router.Group("/api/auth")
 	{

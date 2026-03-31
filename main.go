@@ -19,17 +19,25 @@ func main() {
 
 	router := gin.Default()
 
-	// 1. CẤU HÌNH CORS (PHẢI ĐẶT TRÊN CÙNG ĐỂ ÁP DỤNG CHO TOÀN BỘ API)
+	// CORS
 	router.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true, // Mở cửa cho Vercel gọi API
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	router.GET("/health", func(c *gin.Context) {
+	// ✅ FIX 1: thêm route "/"
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "API is running",
+		})
+	})
+
+	// ✅ FIX 2: tách handler để dùng lại cho GET + HEAD
+	healthHandler := func(c *gin.Context) {
 		sqlDB, err := config.DB.DB()
 		dbStatus := "connected"
 
@@ -42,8 +50,14 @@ func main() {
 			"database": dbStatus,
 			"message":  "Hệ thống đang hoạt động",
 		})
-	})
-	// NHÓM 1: XÁC THỰC (Không cần Token)
+	}
+
+	// ✅ hỗ trợ cả GET + HEAD (fix UptimeRobot)
+	router.GET("/health", healthHandler)
+	router.HEAD("/health", healthHandler)
+
+	// ================= ROUTES =================
+
 	authRoutes := router.Group("/api/auth")
 	{
 		authRoutes.POST("/register", controllers.RegisterOwnerHandler)
@@ -54,7 +68,6 @@ func main() {
 		authRoutes.POST("/refresh", controllers.RefreshTokenHandler)
 	}
 
-	// NHÓM 2: QUYỀN CỦA CHỦ TRỌ (OWNER)
 	ownerRoutes := router.Group("/api/admin")
 	ownerRoutes.Use(middlewares.RequireRole("OWNER"))
 	{
@@ -85,7 +98,6 @@ func main() {
 		ownerRoutes.GET("/reports/profit-loss", controllers.GetProfitLossHandler)
 	}
 
-	// NHÓM 3: QUYỀN CHUNG (OWNER & STAFF)
 	generalRoutes := router.Group("/api/general")
 	generalRoutes.Use(middlewares.RequireRole("OWNER", "STAFF"))
 	{
@@ -125,16 +137,12 @@ func main() {
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
 	}
 
-	// 3. CHẠY SERVER BẰNG PORT ĐỘNG
+	// RUN
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Dự phòng chạy localhost
+		port = "8080"
 	}
 
 	log.Printf("Server đang chạy tại cổng %s", port)
-	errRun := router.Run(":" + port)
-
-	if errRun != nil {
-		log.Fatalf("Lỗi khi khởi chạy server: %v", errRun)
-	}
+	log.Fatal(router.Run(":" + port))
 }

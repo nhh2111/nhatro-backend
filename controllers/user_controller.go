@@ -3,8 +3,12 @@ package controllers
 import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -139,4 +143,64 @@ func UpdateMyProfileHandler(c *gin.Context) {
 		"errorMessage": "Cập nhật thông tin cá nhân thành công",
 		"result":       nil,
 	})
+}
+
+func ChangeMyPasswordHandler(c *gin.Context) {
+	userIDValue, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, 401, "Không xác thực được danh tính")
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"old_password" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
+		return
+	}
+
+	// Lấy ID chuẩn xác
+	var userID uint
+	switch v := userIDValue.(type) {
+	case float64:
+		userID = uint(v)
+	case uint:
+		userID = v
+	}
+
+	if err := services.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, map[string]string{"message": "Đổi mật khẩu thành công"})
+}
+
+// HÀM XỬ LÝ UPLOAD ẢNH
+func UploadAvatarHandler(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Không tìm thấy file tải lên")
+		return
+	}
+
+	// Tạo thư mục nếu chưa có
+	uploadDir := "./uploads/avatars"
+	os.MkdirAll(uploadDir, os.ModePerm)
+
+	// Tạo tên file ngẫu nhiên chống trùng lặp
+	filename := fmt.Sprintf("%d_%s", time.Now().Unix(), filepath.Base(file.Filename))
+	savePath := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, 500, "Không thể lưu file ảnh")
+		return
+	}
+
+	// Trả về đường dẫn ảnh
+	fileURL := "/uploads/avatars/" + filename
+	utils.SuccessResponse(c, http.StatusOK, map[string]string{"url": fileURL})
 }

@@ -5,6 +5,9 @@ import (
 	"doAnHTTT_go/models"
 	"doAnHTTT_go/utils"
 	"errors"
+	"regexp"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func GetAllStaffs(page int, pageSize int, search string) (map[string]interface{}, error) {
@@ -107,6 +110,45 @@ func UpdateMyProfile(userID uint, updateData map[string]interface{}) error {
 
 	if err := config.DB.Model(&user).Updates(updateData).Error; err != nil {
 		return errors.New("lỗi khi cập nhật thông tin cá nhân")
+	}
+
+	return nil
+}
+
+func isValidPassword(password string) bool {
+	if len(password) < 8 {
+		return false
+	}
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
+
+	return hasUpper && hasLower && hasNumber
+}
+
+func ChangePassword(userID uint, oldPassword string, newPassword string) error {
+	if !isValidPassword(newPassword) {
+		return errors.New("Mật khẩu mới quá yếu. Yêu cầu tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường và số.")
+	}
+
+	var user models.User
+
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		return errors.New("không tìm thấy tài khoản")
+	}
+
+	errCompare := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword))
+	if errCompare != nil {
+		return errors.New("mật khẩu hiện tại không chính xác")
+	}
+
+	hashedPassword, errHash := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if errHash != nil {
+		return errors.New("lỗi khi mã hóa mật khẩu mới")
+	}
+
+	if err := config.DB.Model(&user).Update("password_hash", string(hashedPassword)).Error; err != nil {
+		return errors.New("lỗi khi lưu mật khẩu mới")
 	}
 
 	return nil

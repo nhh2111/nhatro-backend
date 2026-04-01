@@ -19,6 +19,9 @@ func main() {
 
 	router := gin.Default()
 
+	// CẤU HÌNH THƯ MỤC CHỨA ẢNH (BẮT BUỘC ĐỂ HIỂN THỊ AVATAR)
+	router.Static("/uploads", "./uploads")
+
 	// CORS
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
@@ -130,8 +133,11 @@ func main() {
 		generalRoutes.GET("/transactions", controllers.GetAllTransactionsHandler)
 		generalRoutes.POST("/transactions", controllers.AddTransactionHandler)
 
+		// API LIÊN QUAN ĐẾN PROFILE
 		generalRoutes.GET("/profile/me", controllers.GetMyProfileHandler)
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
+		generalRoutes.PUT("/profile/password", controllers.ChangeMyPasswordHandler)
+		generalRoutes.POST("/profile/avatar", controllers.UploadAvatarHandler)
 	}
 
 	// RUN

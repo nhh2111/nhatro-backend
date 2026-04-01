@@ -7,30 +7,35 @@ import (
 	"errors"
 )
 
-// Thêm tham số houseId uint vào hàm
 func GetAllRooms(page int, pageSize int, search string, houseId uint) (map[string]interface{}, error) {
 	var roomList []models.Room
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Room{})
-
-	// Lọc theo từ khóa (Số phòng)
+	countQuery := config.DB.Model(&models.Room{})
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("room_number LIKE ? OR description LIKE ?", searchKeyword, searchKeyword)
+		countQuery = countQuery.Where("room_number LIKE ? OR description LIKE ?", searchKeyword, searchKeyword)
 	}
-
-	// Lọc theo ID nhà (Nếu có truyền lên)
 	if houseId > 0 {
-		query = query.Where("house_id = ?", houseId)
+		countQuery = countQuery.Where("house_id = ?", houseId)
 	}
+	countQuery.Count(&totalRecords)
 
-	query.Count(&totalRecords)
+	query := config.DB.Table("rooms").
+		Select("rooms.*, COALESCE((SELECT COUNT(id) FROM contracts WHERE contracts.room_id = rooms.id AND contracts.status = 'ACTIVE'), 0) AS current_occupants")
+
+	if search != "" {
+		searchKeyword := "%" + search + "%"
+		query = query.Where("rooms.room_number LIKE ? OR rooms.description LIKE ?", searchKeyword, searchKeyword)
+	}
+	if houseId > 0 {
+		query = query.Where("rooms.house_id = ?", houseId)
+	}
 
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&roomList)
+	result := query.Offset(offset).Limit(pageSize).Order("rooms.id DESC").Find(&roomList)
 	if result.Error != nil {
 		return nil, result.Error
 	}

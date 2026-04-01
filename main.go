@@ -29,14 +29,12 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// ✅ FIX 1: thêm route "/"
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "API is running",
 		})
 	})
 
-	// ✅ FIX 2: tách handler để dùng lại cho GET + HEAD
 	healthHandler := func(c *gin.Context) {
 		sqlDB, err := config.DB.DB()
 		dbStatus := "connected"
@@ -52,7 +50,6 @@ func main() {
 		})
 	}
 
-	// ✅ hỗ trợ cả GET + HEAD (fix UptimeRobot)
 	router.GET("/health", healthHandler)
 	router.HEAD("/health", healthHandler)
 

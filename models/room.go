@@ -13,5 +13,5 @@ type Room struct {
 	Status            string  `json:"status"`
 	Description       string  `json:"description"`
 	Images            string  `json:"images"`
-	CurrentOccupants  int     `json:"current_occupants" gorm:"-"`
+	CurrentOccupants  int     `json:"current_occupants" gorm:"->"`
 }

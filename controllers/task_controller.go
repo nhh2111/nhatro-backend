@@ -14,7 +14,10 @@ func GetAllTaskHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllTask(page, pageSize, search)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllTask(ownerID, page, pageSize, search)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách nhiệm vụ: "+err.Error())
@@ -31,7 +34,10 @@ func CreateTaskHandler(ginContext *gin.Context) {
 		return
 	}
 
-	if err := services.CreateNewTask(&newTask); err != nil {
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.CreateNewTask(ownerID, &newTask); err != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -46,14 +52,16 @@ func CreateTaskHandler(ginContext *gin.Context) {
 func UpdateTaskHandler(ginContext *gin.Context) {
 	taskID, _ := strconv.Atoi(ginContext.Param("id"))
 
-	// Sử dụng map để nhận dữ liệu linh hoạt (chỉ cập nhật những trường gửi lên)
 	var updateData map[string]interface{}
 	if err := ginContext.ShouldBindJSON(&updateData); err != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
 		return
 	}
 
-	if err := services.UpdateTask(uint(taskID), updateData); err != nil {
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.UpdateTask(ownerID, uint(taskID), updateData); err != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -63,7 +71,11 @@ func UpdateTaskHandler(ginContext *gin.Context) {
 
 func DeleteTaskHandler(ginContext *gin.Context) {
 	taskID, _ := strconv.Atoi(ginContext.Param("id"))
-	if err := services.DeleteTask(uint(taskID)); err != nil {
+
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.DeleteTask(ownerID, uint(taskID)); err != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

@@ -26,9 +26,12 @@ func AddMeterReadingHandler(ginContext *gin.Context) {
 		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được quyền người dùng"})
 		return
 	}
-
 	userRole := roleVal.(string)
-	errService := services.CreateNewMeterReading(requestData, userRole)
+
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.CreateNewMeterReading(ownerID, requestData, userRole)
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{
 			"status": "error",
@@ -49,7 +52,10 @@ func GetMeterReadingsHandler(ginContext *gin.Context) {
 		month = time.Now().Format("2006-01")
 	}
 
-	readings, err := services.GetMeterReadingsByMonth(month)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	readings, err := services.GetMeterReadingsByMonth(ownerID, month)
 	if err != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -60,6 +66,7 @@ func GetMeterReadingsHandler(ginContext *gin.Context) {
 		"data":   readings,
 	})
 }
+
 func UpdateMeterReadingHandler(ginContext *gin.Context) {
 	id, _ := strconv.Atoi(ginContext.Param("id"))
 	var requestData dto.CreateMeterReadingDTO
@@ -69,7 +76,10 @@ func UpdateMeterReadingHandler(ginContext *gin.Context) {
 		return
 	}
 
-	if err := services.UpdateMeterReading(uint(id), requestData); err != nil {
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.UpdateMeterReading(ownerID, uint(id), requestData); err != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -79,7 +89,10 @@ func UpdateMeterReadingHandler(ginContext *gin.Context) {
 func DeleteMeterReadingHandler(ginContext *gin.Context) {
 	id, _ := strconv.Atoi(ginContext.Param("id"))
 
-	if err := services.DeleteMeterReading(uint(id)); err != nil {
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.DeleteMeterReading(ownerID, uint(id)); err != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

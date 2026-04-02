@@ -14,8 +14,14 @@ func GetAllHousesHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllHouses(page, pageSize, search)
+	ownerIDVal, exists := ginContext.Get("ownerID")
+	if !exists {
+		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính chủ cơ sở")
+		return
+	}
+	ownerID := ownerIDVal.(uint)
 
+	resultData, err := services.GetAllHouses(ownerID, page, pageSize, search)
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách nhà: "+err.Error())
 		return
@@ -37,12 +43,12 @@ func CreateHouseHandler(ginContext *gin.Context) {
 		return
 	}
 
-	userIDVal, exists := ginContext.Get("userID")
+	ownerIDVal, exists := ginContext.Get("ownerID")
 	if !exists {
-		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được danh tính người dùng"})
+		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính chủ cơ sở")
 		return
 	}
-	newHouse.OwnerID = userIDVal.(uint)
+	newHouse.OwnerID = ownerIDVal.(uint)
 
 	errCreate := services.CreateNewHouse(&newHouse)
 	if errCreate != nil {
@@ -74,7 +80,10 @@ func UpdateHouseHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateHouse(uint(houseID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateHouse(ownerID, uint(houseID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -90,7 +99,10 @@ func DeleteHouseHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteHouse(uint(houseID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteHouse(ownerID, uint(houseID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return

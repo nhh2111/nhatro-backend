@@ -17,4 +17,5 @@ type Tenant struct {
 	LicensePlates  string    `json:"license_plates"`
 	ImageUrl       string    `json:"image_url"`
 	CreatedAt      time.Time `json:"created_at"`
+	OwnerID        uint      `json:"owner_id"`
 }

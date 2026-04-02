@@ -14,7 +14,10 @@ func GetAllServiceHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllService(page, pageSize, search)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllService(ownerID, page, pageSize, search)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách dịch vụ: "+err.Error())
@@ -36,6 +39,10 @@ func CreateServiceHandler(ginContext *gin.Context) {
 		})
 		return
 	}
+
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	newService.OwnerID = ownerIDVal.(uint)
+
 	errCreate := services.CreateNewService(&newService)
 	if errCreate != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{
@@ -48,7 +55,7 @@ func CreateServiceHandler(ginContext *gin.Context) {
 
 	ginContext.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
-		"message": "Tạo phòng mới thành công",
+		"message": "Tạo dịch vụ mới thành công",
 		"data":    newService,
 	})
 }
@@ -66,7 +73,10 @@ func UpdateServiceHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateService(uint(serviceID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateService(ownerID, uint(serviceID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -82,7 +92,10 @@ func DeleteServiceHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteService(uint(serviceID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteService(ownerID, uint(serviceID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return

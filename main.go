@@ -137,7 +137,10 @@ func main() {
 		generalRoutes.GET("/profile/me", controllers.GetMyProfileHandler)
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
 		generalRoutes.PUT("/profile/password", controllers.ChangeMyPasswordHandler)
-		generalRoutes.POST("/profile/avatar", controllers.UploadAvatarHandler)
+		generalRoutes.POST("/upload", controllers.UploadImageHandler)
+
+		generalRoutes.POST("/upload-multiple", controllers.UploadMultipleImagesHandler)
+		generalRoutes.POST("/delete-file", controllers.DeleteImageHandler)
 	}
 
 	// RUN

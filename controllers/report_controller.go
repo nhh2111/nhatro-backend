@@ -16,7 +16,10 @@ func GetProfitLossHandler(ginContext *gin.Context) {
 		return
 	}
 
-	reportData, errService := services.GetProfitLossReport(month, year)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	reportData, errService := services.GetProfitLossReport(ownerID, month, year)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return

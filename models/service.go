@@ -7,4 +7,5 @@ type Service struct {
 	UnitPrice   float64 `json:"unit_price"`
 	Unit        string  `json:"unit"`
 	Description string  `json:"description"`
+	OwnerID     uint    `json:"owner_id"`
 }

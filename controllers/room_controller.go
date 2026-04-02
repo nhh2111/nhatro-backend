@@ -13,7 +13,7 @@ import (
 func GetAllRoomHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
-	houseIdStr := ginContext.Query("house_id") // Bắt thêm tham số house_id
+	houseIdStr := ginContext.Query("house_id")
 
 	var houseId uint
 	if houseIdStr != "" {
@@ -23,9 +23,14 @@ func GetAllRoomHandler(ginContext *gin.Context) {
 		}
 	}
 
-	// Truyền thêm houseId vào service
-	resultData, err := services.GetAllRooms(page, pageSize, search, houseId)
+	ownerIDVal, exists := ginContext.Get("ownerID")
+	if !exists {
+		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính người dùng")
+		return
+	}
+	ownerID := ownerIDVal.(uint)
 
+	resultData, err := services.GetAllRooms(ownerID, page, pageSize, search, houseId)
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách phòng: "+err.Error())
 		return
@@ -46,7 +51,15 @@ func CreateRoomHandler(ginContext *gin.Context) {
 		})
 		return
 	}
-	errCreate := services.CreateNewRoom(&newRoom)
+
+	ownerIDVal, exists := ginContext.Get("ownerID")
+	if !exists {
+		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được danh tính người dùng"})
+		return
+	}
+	ownerID := ownerIDVal.(uint)
+
+	errCreate := services.CreateNewRoom(ownerID, &newRoom)
 	if errCreate != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
@@ -76,7 +89,10 @@ func UpdateRoomHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateRoom(uint(roomID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateRoom(ownerID, uint(roomID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -92,7 +108,10 @@ func DeleteRoomHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteRoom(uint(roomID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteRoom(ownerID, uint(roomID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return

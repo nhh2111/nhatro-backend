@@ -18,7 +18,10 @@ func GetAllInvoicesHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	monthYear := ginContext.Query("month_year")
 
-	resultData, err := services.GetAllInvoices(page, pageSize, monthYear)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllInvoices(ownerID, page, pageSize, monthYear)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi tải hóa đơn: "+err.Error())
@@ -35,7 +38,10 @@ func TriggerGenerateInvoices(c *gin.Context) {
 		return
 	}
 
-	errService := services.AutoGenerateInvoices(req.MonthYear)
+	ownerIDVal, _ := c.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.AutoGenerateInvoices(ownerID, req.MonthYear)
 	if errService != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -53,14 +59,13 @@ func DeleteInvoiceHandler(ginContext *gin.Context) {
 		return
 	}
 
-	roleVal, exists := ginContext.Get("userRole")
-	if !exists {
-		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được quyền"})
-		return
-	}
+	roleVal, _ := ginContext.Get("userRole")
 	userRole := roleVal.(string)
 
-	errService := services.DeleteInvoice(uint(invoiceID), userRole)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteInvoice(ownerID, uint(invoiceID), userRole)
 	if errService != nil {
 		ginContext.JSON(http.StatusForbidden, gin.H{"error": errService.Error()})
 		return
@@ -77,7 +82,10 @@ func PayInvoiceHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.PayInvoice(requestData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.PayInvoice(ownerID, requestData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return

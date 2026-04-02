@@ -19,7 +19,10 @@ func AddTransactionHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.CreateNewTransaction(requestData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.CreateNewTransaction(ownerID, requestData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -32,7 +35,10 @@ func GetAllTransactionsHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllTransactions(page, pageSize, search)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllTransactions(ownerID, page, pageSize, search)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách giao dịch: "+err.Error())
@@ -55,7 +61,10 @@ func UpdateTransactionHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateTransaction(uint(txID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateTransaction(ownerID, uint(txID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -70,7 +79,10 @@ func DeleteTransactionHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteTransaction(uint(txID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteTransaction(ownerID, uint(txID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return

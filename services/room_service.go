@@ -7,26 +7,33 @@ import (
 	"errors"
 )
 
-func GetAllRooms(page int, pageSize int, search string, houseId uint) (map[string]interface{}, error) {
+func GetAllRooms(ownerID uint, page int, pageSize int, search string, houseId uint) (map[string]interface{}, error) {
 	var roomList []models.Room
 	var totalRecords int64
 
-	countQuery := config.DB.Model(&models.Room{})
+	// BỘ LỌC ĐA KHÁCH HÀNG KHI ĐẾM (JOIN sang houses để lấy owner_id)
+	countQuery := config.DB.Table("rooms").
+		Joins("JOIN houses ON houses.id = rooms.house_id").
+		Where("houses.owner_id = ?", ownerID)
+
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		countQuery = countQuery.Where("room_number LIKE ? OR description LIKE ?", searchKeyword, searchKeyword)
+		countQuery = countQuery.Where("(rooms.room_number LIKE ? OR rooms.description LIKE ?)", searchKeyword, searchKeyword)
 	}
 	if houseId > 0 {
-		countQuery = countQuery.Where("house_id = ?", houseId)
+		countQuery = countQuery.Where("rooms.house_id = ?", houseId)
 	}
 	countQuery.Count(&totalRecords)
 
+	// BỘ LỌC ĐA KHÁCH HÀNG KHI LẤY DỮ LIỆU
 	query := config.DB.Table("rooms").
-		Select("rooms.*, COALESCE((SELECT COUNT(id) FROM contracts WHERE contracts.room_id = rooms.id AND contracts.status = 'ACTIVE'), 0) AS current_occupants")
+		Select("rooms.*, COALESCE((SELECT COUNT(id) FROM contracts WHERE contracts.room_id = rooms.id AND contracts.status = 'ACTIVE'), 0) AS current_occupants").
+		Joins("JOIN houses ON houses.id = rooms.house_id").
+		Where("houses.owner_id = ?", ownerID)
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("rooms.room_number LIKE ? OR rooms.description LIKE ?", searchKeyword, searchKeyword)
+		query = query.Where("(rooms.room_number LIKE ? OR rooms.description LIKE ?)", searchKeyword, searchKeyword)
 	}
 	if houseId > 0 {
 		query = query.Where("rooms.house_id = ?", houseId)
@@ -49,9 +56,15 @@ func GetAllRooms(page int, pageSize int, search string, houseId uint) (map[strin
 	}, nil
 }
 
-func CreateNewRoom(newRoom *models.Room) error {
-	result := config.DB.Create(newRoom)
+func CreateNewRoom(ownerID uint, newRoom *models.Room) error {
+	// KIỂM TRA BẢO MẬT: Nhà (HouseID) mà người dùng định thêm phòng vào có thuộc về họ không?
+	var houseCount int64
+	config.DB.Model(&models.House{}).Where("id = ? AND owner_id = ?", newRoom.HouseID, ownerID).Count(&houseCount)
+	if houseCount == 0 {
+		return errors.New("khu trọ không tồn tại hoặc bạn không có quyền thêm phòng vào đây")
+	}
 
+	result := config.DB.Create(newRoom)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -59,12 +72,26 @@ func CreateNewRoom(newRoom *models.Room) error {
 	return nil
 }
 
-func UpdateRoom(roomID uint, updatedData map[string]interface{}) error {
+func UpdateRoom(ownerID uint, roomID uint, updatedData map[string]interface{}) error {
 	var room models.Room
 
-	errFind := config.DB.First(&room, roomID).Error
+	// KIỂM TRA BẢO MẬT: Phải Join với houses để chắc chắn phòng này thuộc nhà của ownerID
+	errFind := config.DB.Joins("JOIN houses ON houses.id = rooms.house_id").
+		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).
+		First(&room).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu phòng cần sửa")
+		return errors.New("không tìm thấy dữ liệu phòng hoặc bạn không có quyền sửa")
+	}
+
+	// Nếu họ cố tình sửa đổi HouseID (Chuyển phòng sang nhà khác), cũng phải kiểm tra nhà mới
+	if newHouseID, ok := updatedData["house_id"]; ok {
+		var houseCount int64
+		// Ép kiểu an toàn (float64 do JSON parse số thành float64)
+		houseIdToFind := uint(newHouseID.(float64))
+		config.DB.Model(&models.House{}).Where("id = ? AND owner_id = ?", houseIdToFind, ownerID).Count(&houseCount)
+		if houseCount == 0 {
+			return errors.New("khu trọ đích không hợp lệ")
+		}
 	}
 
 	errUpdate := config.DB.Model(&room).Updates(updatedData).Error
@@ -75,12 +102,15 @@ func UpdateRoom(roomID uint, updatedData map[string]interface{}) error {
 	return nil
 }
 
-func DeleteRoom(roomID uint) error {
+func DeleteRoom(ownerID uint, roomID uint) error {
 	var room models.Room
 
-	errFind := config.DB.First(&room, roomID).Error
+	// KIỂM TRA BẢO MẬT: Join với houses để chắc chắn quyền xóa
+	errFind := config.DB.Joins("JOIN houses ON houses.id = rooms.house_id").
+		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).
+		First(&room).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu phòng cần xóa")
+		return errors.New("không tìm thấy dữ liệu phòng hoặc bạn không có quyền xóa")
 	}
 
 	if room.Status == "OCCUPIED" {

@@ -14,4 +14,5 @@ type User struct {
 	IsFirstLogin bool      `json:"is_first_login" gorm:"default:false"`
 	Avatar       string    `json:"avatar"`
 	CreatedAt    time.Time `json:"created_at"`
+	EmployerID   int       `json:"employer_id"`
 }

@@ -9,18 +9,20 @@ import (
 	"gorm.io/gorm"
 )
 
-func GetAllContracts(page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllContracts(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var contractList []models.Contract
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Contract{}).Preload("Room").Preload("Tenant")
+	// BẢO MẬT: CHỈ LẤY HỢP ĐỒNG THUỘC NHÀ CỦA OWNER NÀY
+	query := config.DB.Model(&models.Contract{}).
+		Preload("Room").Preload("Tenant").
+		Joins("JOIN rooms ON contracts.room_id = rooms.id").
+		Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("houses.owner_id = ?", ownerID)
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.
-			Joins("JOIN rooms ON contracts.room_id = rooms.id").
-			Joins("JOIN tenants ON contracts.tenant_id = tenants.id").
-			Where("rooms.room_number LIKE ? OR tenants.full_name LIKE ?", searchKeyword, searchKeyword)
+		query = query.Where("(rooms.room_number LIKE ? OR tenants.full_name LIKE ?)", searchKeyword, searchKeyword)
 	}
 
 	query.Count(&totalRecords)
@@ -28,7 +30,8 @@ func GetAllContracts(page int, pageSize int, search string) (map[string]interfac
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&contractList)
+	// Thêm tiền tố contracts.id để tránh lỗi mơ hồ (ambiguous) khi JOIN
+	result := query.Offset(offset).Limit(pageSize).Order("contracts.id DESC").Find(&contractList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -42,11 +45,15 @@ func GetAllContracts(page int, pageSize int, search string) (map[string]interfac
 	}, nil
 }
 
-func CreateContract(contract *models.Contract) error {
+func CreateContract(ownerID uint, contract *models.Contract) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var room models.Room
-		if err := tx.First(&room, contract.RoomID).Error; err != nil {
-			return errors.New("không tìm thấy phòng")
+
+		// KIỂM TRA BẢO MẬT: Phòng này có thuộc về nhà của chủ trọ đang thao tác không?
+		if err := tx.Joins("JOIN houses ON rooms.house_id = houses.id").
+			Where("rooms.id = ? AND houses.owner_id = ?", contract.RoomID, ownerID).
+			First(&room).Error; err != nil {
+			return errors.New("phòng không hợp lệ hoặc bạn không có quyền lập hợp đồng cho phòng này")
 		}
 
 		if room.Status == "MAINTENANCE" {
@@ -72,11 +79,16 @@ func CreateContract(contract *models.Contract) error {
 	})
 }
 
-func TerminateContract(contractID uint) error {
+func TerminateContract(ownerID uint, contractID uint) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var contract models.Contract
-		if err := tx.First(&contract, contractID).Error; err != nil {
-			return errors.New("không tìm thấy hợp đồng")
+
+		// KIỂM TRA BẢO MẬT: Hợp đồng này có nằm trong nhà của chủ trọ đang thao tác không?
+		if err := tx.Joins("JOIN rooms ON contracts.room_id = rooms.id").
+			Joins("JOIN houses ON rooms.house_id = houses.id").
+			Where("contracts.id = ? AND houses.owner_id = ?", contractID, ownerID).
+			First(&contract).Error; err != nil {
+			return errors.New("không tìm thấy hợp đồng hoặc bạn không có quyền thao tác")
 		}
 
 		if err := tx.Model(&contract).Update("status", "TERMINATED").Error; err != nil {

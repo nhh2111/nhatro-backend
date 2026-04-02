@@ -6,21 +6,25 @@ import (
 	"errors"
 )
 
-func GetProfitLossReport(month string, year string) (dto.ProfitLossReportDTO, error) {
+func GetProfitLossReport(ownerID uint, month string, year string) (dto.ProfitLossReportDTO, error) {
 	var totalIncome float64
 	var totalExpense float64
 
+	// TÍNH TỔNG THU (Chỉ của chủ trọ hiện tại)
 	errIncome := config.DB.Table("transactions").
-		Where("type = ? AND MONTH(transaction_date) = ? AND YEAR(transaction_date) = ?", "INCOME", month, year).
-		Select("COALESCE(SUM(amount), 0)").Scan(&totalIncome).Error
+		Joins("JOIN houses ON transactions.house_id = houses.id").
+		Where("houses.owner_id = ? AND transactions.type = ? AND MONTH(transactions.transaction_date) = ? AND YEAR(transactions.transaction_date) = ?", ownerID, "INCOME", month, year).
+		Select("COALESCE(SUM(transactions.amount), 0)").Scan(&totalIncome).Error
 
 	if errIncome != nil {
 		return dto.ProfitLossReportDTO{}, errors.New("lỗi khi thống kê tổng thu")
 	}
 
+	// TÍNH TỔNG CHI (Chỉ của chủ trọ hiện tại)
 	errExpense := config.DB.Table("transactions").
-		Where("type = ? AND MONTH(transaction_date) = ? AND YEAR(transaction_date) = ?", "EXPENSE", month, year).
-		Select("COALESCE(SUM(amount), 0)").Scan(&totalExpense).Error
+		Joins("JOIN houses ON transactions.house_id = houses.id").
+		Where("houses.owner_id = ? AND transactions.type = ? AND MONTH(transactions.transaction_date) = ? AND YEAR(transactions.transaction_date) = ?", ownerID, "EXPENSE", month, year).
+		Select("COALESCE(SUM(transactions.amount), 0)").Scan(&totalExpense).Error
 
 	if errExpense != nil {
 		return dto.ProfitLossReportDTO{}, errors.New("lỗi khi thống kê tổng chi")

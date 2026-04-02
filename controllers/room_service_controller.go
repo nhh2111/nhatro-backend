@@ -12,8 +12,21 @@ import (
 
 func GetServicesOfRoomHandler(c *gin.Context) {
 	roomID := c.Param("id")
-	var roomServices []models.RoomService
 
+	ownerIDVal, _ := c.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	// CHẶN BẢO MẬT: Kiểm tra phòng này có phải của chủ trọ không
+	var count int64
+	config.DB.Table("rooms").Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).Count(&count)
+
+	if count == 0 {
+		utils.ErrorResponse(c, http.StatusForbidden, 403, "Phòng không hợp lệ hoặc bạn không có quyền")
+		return
+	}
+
+	var roomServices []models.RoomService
 	if err := config.DB.Where("room_id = ?", roomID).Find(&roomServices).Error; err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, 500, "Lỗi khi lấy dịch vụ của phòng")
 		return
@@ -40,6 +53,19 @@ func AssignServicesToRoomHandler(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		return
+	}
+
+	ownerIDVal, _ := c.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	// CHẶN BẢO MẬT
+	var count int64
+	config.DB.Table("rooms").Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).Count(&count)
+
+	if count == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Phòng không hợp lệ hoặc bạn không có quyền"})
 		return
 	}
 

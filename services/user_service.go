@@ -10,14 +10,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func GetAllStaffs(page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllStaffs(employerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var userList []models.User
 	var totalRecords int64
 
-	query := config.DB.Model(&models.User{}).Where("role = ?", "STAFF")
+	// CHẶN: Chỉ lấy nhân viên của Chủ trọ này
+	query := config.DB.Model(&models.User{}).Where("role = ? AND employer_id = ?", "STAFF", employerID)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("full_name LIKE ? OR phone LIKE ? OR email LIKE ?", searchKeyword, searchKeyword, searchKeyword)
+		query = query.Where("(full_name LIKE ? OR phone LIKE ? OR email LIKE ?)", searchKeyword, searchKeyword, searchKeyword)
 	}
 
 	query.Count(&totalRecords)
@@ -39,12 +40,13 @@ func GetAllStaffs(page int, pageSize int, search string) (map[string]interface{}
 	}, nil
 }
 
-func UpdateStaffs(userID uint, updatedData map[string]interface{}) error {
+func UpdateStaffs(employerID uint, userID uint, updatedData map[string]interface{}) error {
 	var user models.User
 
-	errFind := config.DB.First(&user, userID).Error
+	// KIỂM TRA: Nhân viên này có thuộc quyền quản lý của chủ trọ không?
+	errFind := config.DB.Where("id = ? AND employer_id = ?", userID, employerID).First(&user).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu nhân viên cần sửa")
+		return errors.New("không tìm thấy dữ liệu nhân viên hoặc bạn không có quyền sửa")
 	}
 
 	errUpdate := config.DB.Model(&user).Updates(updatedData).Error
@@ -55,12 +57,13 @@ func UpdateStaffs(userID uint, updatedData map[string]interface{}) error {
 	return nil
 }
 
-func DeleteUser(userID uint) error {
+func DeleteUser(employerID uint, userID uint) error {
 	var user models.User
 
-	errFind := config.DB.First(&user, userID).Error
+	// KIỂM TRA: Nhân viên này có thuộc quyền quản lý của chủ trọ không?
+	errFind := config.DB.Where("id = ? AND employer_id = ?", userID, employerID).First(&user).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu nhân viên cần xóa")
+		return errors.New("không tìm thấy dữ liệu nhân viên hoặc bạn không có quyền xóa")
 	}
 
 	errDelete := config.DB.Delete(&user).Error

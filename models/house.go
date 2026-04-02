@@ -8,6 +8,7 @@ type House struct {
 	District string `json:"district"`
 	Ward     string `json:"ward"`
 	Address  string `json:"address"`
+	Images   string `json:"images"`
 
 	TotalRooms int `gorm:"->" json:"total_rooms"`
 	EmptyRooms int `gorm:"->" json:"empty_rooms"`

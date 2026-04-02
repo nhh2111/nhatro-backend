@@ -86,11 +86,12 @@ func VerifyRegistrationOTP(email, otpCode string) error {
 	return nil
 }
 
-func CreateStaffAccount(email, fullName string) error {
+func CreateStaffAccount(employerID uint, email, fullName string) error {
 	errVerifyEmail := utils.VerifyEmailDomain(email)
 	if errVerifyEmail != nil {
 		return errors.New("tên miền email không tồn tại hoặc không thể nhận thư")
 	}
+
 	var existingUser models.User
 	config.DB.Where("email = ?", email).First(&existingUser)
 	if existingUser.ID != 0 {
@@ -106,10 +107,10 @@ func CreateStaffAccount(email, fullName string) error {
 		Role:         "STAFF",
 		Status:       true,
 		IsFirstLogin: true,
+		EmployerID:   int(employerID),
 	}
 
-	errCreate := config.DB.Create(&newStaff).Error
-	if errCreate != nil {
+	if errCreate := config.DB.Create(&newStaff).Error; errCreate != nil {
 		return errors.New("lỗi khi tạo tài khoản nhân viên")
 	}
 

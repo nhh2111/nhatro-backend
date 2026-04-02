@@ -11,6 +11,7 @@ type Task struct {
 	Status     string     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
 	FinishedAt *time.Time `json:"finished_at"`
+	OwnerID    uint       `json:"owner_id"`
 
 	House House `gorm:"foreignKey:HouseID" json:"House"`
 	Room  Room  `gorm:"foreignKey:RoomID" json:"Room"`

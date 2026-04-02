@@ -8,10 +8,16 @@ import (
 	"errors"
 )
 
-func CreateNewTransaction(dtoInput dto.CreateTransactionDTO) error {
+func CreateNewTransaction(ownerID uint, dtoInput dto.CreateTransactionDTO) error {
 	isValidType := (dtoInput.Type == "INCOME" || dtoInput.Type == "EXPENSE")
 	if !isValidType {
 		return errors.New("loại giao dịch chỉ được phép là INCOME (Thu) hoặc EXPENSE (Chi)")
+	}
+
+	// KIỂM TRA BẢO MẬT: Nhà này có thuộc về ownerID không?
+	var house models.House
+	if err := config.DB.Where("id = ? AND owner_id = ?", dtoInput.HouseID, ownerID).First(&house).Error; err != nil {
+		return errors.New("khu trọ không hợp lệ hoặc bạn không có quyền thêm giao dịch vào đây")
 	}
 
 	newTransaction := models.Transaction{
@@ -32,22 +38,27 @@ func CreateNewTransaction(dtoInput dto.CreateTransactionDTO) error {
 
 	return nil
 }
-func GetAllTransactions(page int, pageSize int, search string) (map[string]interface{}, error) {
+
+func GetAllTransactions(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var transactionList []models.Transaction
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Transaction{}).Preload("House").Preload("Room")
+	// JOIN SANG NHÀ ĐỂ LỌC THEO CHỦ
+	query := config.DB.Model(&models.Transaction{}).
+		Preload("House").Preload("Room").
+		Joins("JOIN houses ON transactions.house_id = houses.id").
+		Where("houses.owner_id = ?", ownerID)
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("type LIKE ? OR category LIKE ?", searchKeyword, searchKeyword)
+		query = query.Where("(transactions.type LIKE ? OR transactions.category LIKE ?)", searchKeyword, searchKeyword)
 	}
 	query.Count(&totalRecords)
 
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&transactionList)
+	result := query.Offset(offset).Limit(pageSize).Order("transactions.id DESC").Find(&transactionList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -60,11 +71,16 @@ func GetAllTransactions(page int, pageSize int, search string) (map[string]inter
 	}, nil
 }
 
-func UpdateTransaction(transactionID uint, updatedData map[string]interface{}) error {
+func UpdateTransaction(ownerID uint, transactionID uint, updatedData map[string]interface{}) error {
 	var transaction models.Transaction
-	errFind := config.DB.First(&transaction, transactionID).Error
+
+	// KIỂM TRA BẢO MẬT
+	errFind := config.DB.Joins("JOIN houses ON transactions.house_id = houses.id").
+		Where("transactions.id = ? AND houses.owner_id = ?", transactionID, ownerID).
+		First(&transaction).Error
+
 	if errFind != nil {
-		return errors.New("không tìm thấy phiếu thu/chi cần sửa")
+		return errors.New("không tìm thấy phiếu thu/chi cần sửa hoặc bạn không có quyền")
 	}
 
 	errUpdate := config.DB.Model(&transaction).Updates(updatedData).Error
@@ -74,11 +90,16 @@ func UpdateTransaction(transactionID uint, updatedData map[string]interface{}) e
 	return nil
 }
 
-func DeleteTransaction(transactionID uint) error {
+func DeleteTransaction(ownerID uint, transactionID uint) error {
 	var transaction models.Transaction
-	errFind := config.DB.First(&transaction, transactionID).Error
+
+	// KIỂM TRA BẢO MẬT
+	errFind := config.DB.Joins("JOIN houses ON transactions.house_id = houses.id").
+		Where("transactions.id = ? AND houses.owner_id = ?", transactionID, ownerID).
+		First(&transaction).Error
+
 	if errFind != nil {
-		return errors.New("không tìm thấy phiếu thu/chi cần xóa")
+		return errors.New("không tìm thấy phiếu thu/chi cần xóa hoặc bạn không có quyền")
 	}
 
 	errDelete := config.DB.Delete(&transaction).Error

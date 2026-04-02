@@ -6,28 +6,32 @@ import (
 	"doAnHTTT_go/models"
 	"doAnHTTT_go/utils"
 	"errors"
-	"fmt" // Thêm fmt để dùng Sprintf
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-func GetAllInvoices(page int, pageSize int, monthYear string) (map[string]interface{}, error) {
+func GetAllInvoices(ownerID uint, page int, pageSize int, monthYear string) (map[string]interface{}, error) {
 	var invoiceList []models.Invoice
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Invoice{}).Preload("Items").Preload("Contract.Room").Preload("Contract.Tenant")
+	query := config.DB.Model(&models.Invoice{}).
+		Preload("Items").Preload("Contract.Room").Preload("Contract.Tenant").
+		Joins("JOIN contracts ON invoices.contract_id = contracts.id").
+		Joins("JOIN rooms ON contracts.room_id = rooms.id").
+		Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("houses.owner_id = ?", ownerID)
 
 	if monthYear != "" {
-		query = query.Where("month_year = ?", monthYear)
+		query = query.Where("invoices.month_year = ?", monthYear)
 	}
 
 	query.Count(&totalRecords)
-
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&invoiceList)
+	result := query.Offset(offset).Limit(pageSize).Order("invoices.created_at DESC").Find(&invoiceList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -41,6 +45,7 @@ func GetAllInvoices(page int, pageSize int, monthYear string) (map[string]interf
 	}, nil
 }
 
+// Hàm GenerateInvoice giữ nguyên nội tại vì nó được gọi bởi AutoGenerateInvoices (đã được bọc bảo mật)
 func GenerateInvoice(roomID uint, monthYear string) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var room models.Room
@@ -59,7 +64,6 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 			return nil
 		}
 
-		// Tạo Hóa đơn
 		invoice := models.Invoice{
 			ContractID:  repContract.ID,
 			MonthYear:   monthYear,
@@ -74,7 +78,6 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 
 		var total float64 = 0
 
-		// --- MỤC 1: TIỀN THUÊ PHÒNG ---
 		rentItem := models.InvoiceItem{
 			InvoiceID:   invoice.ID,
 			Description: fmt.Sprintf("Tiền thuê phòng %s", room.RoomNumber),
@@ -85,9 +88,7 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 		tx.Create(&rentItem)
 		total += rentItem.Amount
 
-		// --- MỤC 2: DỊCH VỤ CỐ ĐỊNH, ĐẦU NGƯỜI, XE CỘ ---
 		var roomServices []models.Service
-
 		tx.Table("services").
 			Joins("JOIN room_services ON services.id = room_services.service_id").
 			Where("room_services.room_id = ? AND services.service_type IN ?", roomID, []string{"FIXED", "PER_PERSON", "PER_MOTORBIKE", "PER_CAR"}).
@@ -95,33 +96,22 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 
 		for _, s := range roomServices {
 			quantity := 1.0
-
 			if s.ServiceType == "PER_PERSON" {
 				var personCount int64
 				tx.Table("contracts").Where("room_id = ? AND status = 'ACTIVE'", roomID).Count(&personCount)
 				quantity = float64(personCount)
-
 			} else if s.ServiceType == "PER_MOTORBIKE" {
 				var totalMotos int64
-				tx.Table("tenants").
-					Joins("JOIN contracts ON tenants.id = contracts.tenant_id").
-					Where("contracts.room_id = ? AND contracts.status = 'ACTIVE'", roomID).
-					Select("COALESCE(SUM(tenants.motorbike_count), 0)").
-					Scan(&totalMotos)
-
+				tx.Table("tenants").Joins("JOIN contracts ON tenants.id = contracts.tenant_id").
+					Where("contracts.room_id = ? AND contracts.status = 'ACTIVE'", roomID).Select("COALESCE(SUM(tenants.motorbike_count), 0)").Scan(&totalMotos)
 				if totalMotos == 0 {
 					continue
 				}
 				quantity = float64(totalMotos)
-
 			} else if s.ServiceType == "PER_CAR" {
 				var totalCars int64
-				tx.Table("tenants").
-					Joins("JOIN contracts ON tenants.id = contracts.tenant_id").
-					Where("contracts.room_id = ? AND contracts.status = 'ACTIVE'", roomID).
-					Select("COALESCE(SUM(tenants.car_count), 0)").
-					Scan(&totalCars)
-
+				tx.Table("tenants").Joins("JOIN contracts ON tenants.id = contracts.tenant_id").
+					Where("contracts.room_id = ? AND contracts.status = 'ACTIVE'", roomID).Select("COALESCE(SUM(tenants.car_count), 0)").Scan(&totalCars)
 				if totalCars == 0 {
 					continue
 				}
@@ -140,11 +130,8 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 			total += item.Amount
 		}
 
-		// --- MỤC 3: DỊCH VỤ ĐIỆN NƯỚC ---
 		var readings []models.MeterReading
-		tx.Preload("Service").
-			Where("room_id = ? AND billing_month = ?", roomID, monthYear).
-			Find(&readings)
+		tx.Preload("Service").Where("room_id = ? AND billing_month = ?", roomID, monthYear).Find(&readings)
 
 		for _, r := range readings {
 			item := models.InvoiceItem{
@@ -162,9 +149,13 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 	})
 }
 
-func AutoGenerateInvoices(monthYear string) error {
+func AutoGenerateInvoices(ownerID uint, monthYear string) error {
 	var occupiedRooms []models.Room
-	config.DB.Where("status = ?", "OCCUPIED").Find(&occupiedRooms)
+
+	// CHỈ LẤY CÁC PHÒNG THUỘC SỞ HỮU CỦA CHỦ TRỌ NÀY
+	config.DB.Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("rooms.status = ? AND houses.owner_id = ?", "OCCUPIED", ownerID).
+		Find(&occupiedRooms)
 
 	if len(occupiedRooms) == 0 {
 		return errors.New("không có phòng nào đang cho thuê để chốt sổ")
@@ -176,29 +167,40 @@ func AutoGenerateInvoices(monthYear string) error {
 	return nil
 }
 
-// 4. Xóa hóa đơn
-func DeleteInvoice(invoiceID uint, userRole string) error {
+func DeleteInvoice(ownerID uint, invoiceID uint, userRole string) error {
 	var invoice models.Invoice
-	if err := config.DB.First(&invoice, invoiceID).Error; err != nil {
-		return errors.New("không tìm thấy hóa đơn")
+
+	err := config.DB.Joins("JOIN contracts ON invoices.contract_id = contracts.id").
+		Joins("JOIN rooms ON contracts.room_id = rooms.id").
+		Joins("JOIN houses ON rooms.house_id = houses.id").
+		Where("invoices.id = ? AND houses.owner_id = ?", invoiceID, ownerID).
+		First(&invoice).Error
+
+	if err != nil {
+		return errors.New("không tìm thấy hóa đơn hoặc bạn không có quyền xóa")
 	}
 
 	if userRole == "STAFF" && (invoice.Status == "PAID" || invoice.Status == "PARTIAL") {
 		return errors.New("nhân viên không được xóa hóa đơn đã thu tiền")
 	}
 
-	// Xóa cả các item chi tiết bên trong
 	config.DB.Where("invoice_id = ?", invoiceID).Delete(&models.InvoiceItem{})
 	return config.DB.Delete(&invoice).Error
 }
 
-// 5. Thu tiền (Thanh toán)
-func PayInvoice(dtoInput dto.PayInvoiceDTO) error {
+func PayInvoice(ownerID uint, dtoInput dto.PayInvoiceDTO) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var invoice models.Invoice
-		// QUAN TRỌNG: Phải Preload để lấy HouseID/RoomID cho bảng Transaction
-		if err := tx.Preload("Contract.Room").First(&invoice, dtoInput.InvoiceID).Error; err != nil {
-			return errors.New("không tìm thấy hóa đơn")
+
+		err := tx.Preload("Contract.Room").
+			Joins("JOIN contracts ON invoices.contract_id = contracts.id").
+			Joins("JOIN rooms ON contracts.room_id = rooms.id").
+			Joins("JOIN houses ON rooms.house_id = houses.id").
+			Where("invoices.id = ? AND houses.owner_id = ?", dtoInput.InvoiceID, ownerID).
+			First(&invoice).Error
+
+		if err != nil {
+			return errors.New("không tìm thấy hóa đơn hoặc bạn không có quyền thao tác")
 		}
 
 		if invoice.Status == "PAID" {
@@ -211,16 +213,16 @@ func PayInvoice(dtoInput dto.PayInvoiceDTO) error {
 			newStatus = "PAID"
 		}
 
-		// Cập nhật hóa đơn
 		if err := tx.Model(&invoice).Updates(map[string]interface{}{
 			"paid_amount": newPaidAmount,
 			"status":      newStatus,
 		}).Error; err != nil {
 			return errors.New("lỗi cập nhật hóa đơn")
 		}
+
 		houseID := invoice.Contract.Room.HouseID
 		roomID := invoice.Contract.RoomID
-		// Tạo phiếu thu tiền (Transaction)
+
 		incomeTx := models.Transaction{
 			HouseID:         &houseID,
 			RoomID:          &roomID,

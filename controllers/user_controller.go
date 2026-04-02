@@ -17,7 +17,10 @@ func GetAllUserHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllStaffs(page, pageSize, search)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllStaffs(ownerID, page, pageSize, search)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách nhân viên: "+err.Error())
@@ -38,7 +41,10 @@ func CreateUserHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errCreate := services.CreateStaffAccount(req.Email, req.FullName)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errCreate := services.CreateStaffAccount(ownerID, req.Email, req.FullName)
 	if errCreate != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errCreate.Error()})
 		return
@@ -60,7 +66,10 @@ func UpdateUserHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateStaffs(uint(userID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateStaffs(ownerID, uint(userID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -76,7 +85,10 @@ func DeleteUserHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteUser(uint(userID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteUser(ownerID, uint(userID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return
@@ -162,7 +174,6 @@ func ChangeMyPasswordHandler(c *gin.Context) {
 		return
 	}
 
-	// Lấy ID chuẩn xác
 	var userID uint
 	switch v := userIDValue.(type) {
 	case float64:
@@ -179,7 +190,6 @@ func ChangeMyPasswordHandler(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, map[string]string{"message": "Đổi mật khẩu thành công"})
 }
 
-// HÀM XỬ LÝ UPLOAD ẢNH
 func UploadAvatarHandler(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -187,11 +197,9 @@ func UploadAvatarHandler(c *gin.Context) {
 		return
 	}
 
-	// Tạo thư mục nếu chưa có
 	uploadDir := "./uploads/avatars"
 	os.MkdirAll(uploadDir, os.ModePerm)
 
-	// Tạo tên file ngẫu nhiên chống trùng lặp
 	filename := fmt.Sprintf("%d_%s", time.Now().Unix(), filepath.Base(file.Filename))
 	savePath := filepath.Join(uploadDir, filename)
 
@@ -200,7 +208,6 @@ func UploadAvatarHandler(c *gin.Context) {
 		return
 	}
 
-	// Trả về đường dẫn ảnh
 	fileURL := "/uploads/avatars/" + filename
 	utils.SuccessResponse(c, http.StatusOK, map[string]string{"url": fileURL})
 }

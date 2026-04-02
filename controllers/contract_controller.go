@@ -14,7 +14,11 @@ func GetAllContractHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllContracts(page, pageSize, search)
+	// Lấy ownerID từ context
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllContracts(ownerID, page, pageSize, search)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách hợp đồng: "+err.Error())
@@ -31,7 +35,11 @@ func CreateContractHandler(c *gin.Context) {
 		return
 	}
 
-	if err := services.CreateContract(&contract); err != nil {
+	// Lấy ownerID từ context
+	ownerIDVal, _ := c.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.CreateContract(ownerID, &contract); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -41,7 +49,12 @@ func CreateContractHandler(c *gin.Context) {
 // API dùng để thanh lý / kết thúc hợp đồng
 func TerminateContractHandler(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := services.TerminateContract(uint(id)); err != nil {
+
+	// Lấy ownerID từ context
+	ownerIDVal, _ := c.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	if err := services.TerminateContract(ownerID, uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

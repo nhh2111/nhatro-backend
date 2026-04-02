@@ -7,14 +7,14 @@ import (
 	"errors"
 )
 
-func GetAllHouses(page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllHouses(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var houseList []models.House
 	var totalRecords int64
 
-	countQuery := config.DB.Model(&models.House{})
+	countQuery := config.DB.Model(&models.House{}).Where("owner_id = ?", ownerID)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		countQuery = countQuery.Where("name LIKE ? OR address LIKE ? OR ward LIKE ? OR district LIKE ? OR city LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+		countQuery = countQuery.Where("(name LIKE ? OR address LIKE ? OR ward LIKE ? OR district LIKE ? OR city LIKE ?)", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
 	}
 	countQuery.Count(&totalRecords)
 
@@ -31,11 +31,12 @@ func GetAllHouses(page int, pageSize int, search string) (map[string]interface{}
 				END
 			), 0) as empty_rooms`).
 		Joins("LEFT JOIN rooms ON rooms.house_id = houses.id").
+		Where("houses.owner_id = ?", ownerID).
 		Group("houses.id")
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("houses.name LIKE ? OR houses.address LIKE ? OR houses.ward LIKE ? OR houses.district LIKE ? OR houses.city LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+		query = query.Where("(houses.name LIKE ? OR houses.address LIKE ? OR houses.ward LIKE ? OR houses.district LIKE ? OR houses.city LIKE ?)", searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
 	}
 
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
@@ -65,12 +66,12 @@ func CreateNewHouse(newHouse *models.House) error {
 	return nil
 }
 
-func UpdateHouse(HouseID uint, updatedData map[string]interface{}) error {
+func UpdateHouse(ownerID uint, houseID uint, updatedData map[string]interface{}) error {
 	var house models.House
 
-	errFind := config.DB.First(&house, HouseID).Error
+	errFind := config.DB.Where("owner_id = ?", ownerID).First(&house, houseID).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu nhà cần sửa")
+		return errors.New("không tìm thấy dữ liệu nhà hoặc bạn không có quyền sửa đổi")
 	}
 
 	errUpdate := config.DB.Model(&house).Updates(updatedData).Error
@@ -80,13 +81,12 @@ func UpdateHouse(HouseID uint, updatedData map[string]interface{}) error {
 
 	return nil
 }
-
-func DeleteHouse(HouseID uint) error {
+func DeleteHouse(ownerID uint, houseID uint) error {
 	var house models.House
 
-	errFind := config.DB.First(&house, HouseID).Error
+	errFind := config.DB.Where("owner_id = ?", ownerID).First(&house, houseID).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu nhà cần xóa")
+		return errors.New("không tìm thấy dữ liệu nhà hoặc bạn không có quyền xóa")
 	}
 
 	errDelete := config.DB.Delete(&house).Error

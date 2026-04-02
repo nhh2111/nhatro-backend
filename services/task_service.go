@@ -8,15 +8,16 @@ import (
 	"time"
 )
 
-func GetAllTask(page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllTask(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var taskList []models.Task
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Task{}).Preload("House").Preload("Room")
+	// CHẶN BẢO MẬT TẠI ĐÂY
+	query := config.DB.Model(&models.Task{}).Preload("House").Preload("Room").Where("owner_id = ?", ownerID)
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("status LIKE ? OR title LIKE ?", searchKeyword, searchKeyword)
+		query = query.Where("(status LIKE ? OR title LIKE ?)", searchKeyword, searchKeyword)
 	}
 	query.Count(&totalRecords)
 
@@ -36,20 +37,23 @@ func GetAllTask(page int, pageSize int, search string) (map[string]interface{}, 
 	}, nil
 }
 
-func CreateNewTask(newTask *models.Task) error {
+func CreateNewTask(ownerID uint, newTask *models.Task) error {
 	if newTask.Status == "" {
 		newTask.Status = "OPEN"
 	}
+	newTask.OwnerID = ownerID // Gán chủ sở hữu cho task mới
+
 	result := config.DB.Create(newTask)
 	return result.Error
 }
 
-func UpdateTask(taskID uint, updatedData map[string]interface{}) error {
+func UpdateTask(ownerID uint, taskID uint, updatedData map[string]interface{}) error {
 	var task models.Task
 
-	errFind := config.DB.First(&task, taskID).Error
+	// KIỂM TRA QUYỀN SỞ HỮU
+	errFind := config.DB.Where("id = ? AND owner_id = ?", taskID, ownerID).First(&task).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu nhiệm vụ cần sửa")
+		return errors.New("không tìm thấy dữ liệu nhiệm vụ hoặc bạn không có quyền sửa")
 	}
 
 	if status, ok := updatedData["status"]; ok {
@@ -68,14 +72,18 @@ func UpdateTask(taskID uint, updatedData map[string]interface{}) error {
 	return nil
 }
 
-func DeleteTask(taskID uint) error {
+func DeleteTask(ownerID uint, taskID uint) error {
 	var task models.Task
-	result := config.DB.Delete(&task, taskID)
+
+	// KIỂM TRA QUYỀN SỞ HỮU
+	errFind := config.DB.Where("id = ? AND owner_id = ?", taskID, ownerID).First(&task).Error
+	if errFind != nil {
+		return errors.New("không tìm thấy nhiệm vụ hoặc bạn không có quyền xóa")
+	}
+
+	result := config.DB.Delete(&task)
 	if result.Error != nil {
 		return errors.New("lỗi khi xóa nhiệm vụ")
-	}
-	if result.RowsAffected == 0 {
-		return errors.New("không tìm thấy nhiệm vụ để xóa")
 	}
 	return nil
 }

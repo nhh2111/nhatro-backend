@@ -1,6 +1,8 @@
 package middlewares
 
 import (
+	"doAnHTTT_go/config"
+	"doAnHTTT_go/models"
 	"net/http"
 	"os"
 	"strings"
@@ -20,7 +22,6 @@ func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
 		secretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
 		token, errParse := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return secretKey, nil
@@ -40,16 +41,26 @@ func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		userRole := claims["role"].(string)
-		userID := claims["user_id"].(float64)
+		userID := uint(claims["user_id"].(float64))
 
-		isAllowed := checkRoleExists(userRole, allowedRoles)
-		if !isAllowed {
+		if !checkRoleExists(userRole, allowedRoles) {
 			ginContext.JSON(http.StatusForbidden, gin.H{"error": "Bạn không có quyền thực hiện thao tác này"})
 			ginContext.Abort()
 			return
 		}
 
-		ginContext.Set("userID", uint(userID))
+		var ownerID uint
+		if userRole == "STAFF" {
+			var staff models.User
+			if err := config.DB.Select("employer_id").First(&staff, userID).Error; err == nil {
+				ownerID = uint(staff.EmployerID)
+			}
+		} else {
+			ownerID = userID
+		}
+
+		ginContext.Set("userID", userID)
+		ginContext.Set("ownerID", ownerID)
 		ginContext.Set("userRole", userRole)
 		ginContext.Next()
 	}

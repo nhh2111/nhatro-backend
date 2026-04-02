@@ -14,7 +14,10 @@ func GetAllTenantHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	resultData, err := services.GetAllTenant(page, pageSize, search)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	resultData, err := services.GetAllTenant(ownerID, page, pageSize, search)
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Không thể lấy danh sách: "+err.Error())
 		return
@@ -30,6 +33,9 @@ func CreateTenantHandler(ginContext *gin.Context) {
 		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu đầu vào không hợp lệ")
 		return
 	}
+
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	newTenant.OwnerID = ownerIDVal.(uint) // Gắn chủ sở hữu cho khách thuê
 
 	errCreate := services.CreateNewTenant(&newTenant)
 	if errCreate != nil {
@@ -53,7 +59,10 @@ func UpdateTenantHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.UpdateTenant(uint(tenantID), updateData)
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.UpdateTenant(ownerID, uint(tenantID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
 		return
@@ -69,7 +78,10 @@ func DeleteTenantHandler(ginContext *gin.Context) {
 		return
 	}
 
-	errService := services.DeleteTenant(uint(tenantID))
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
+
+	errService := services.DeleteTenant(ownerID, uint(tenantID))
 	if errService != nil {
 		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
 		return

@@ -7,14 +7,15 @@ import (
 	"errors"
 )
 
-func GetAllTenant(page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllTenant(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
 	var tenantList []models.Tenant
 	var totalRecords int64
 
-	query := config.DB.Model(&models.Tenant{})
+	// LỌC THEO OWNER_ID
+	query := config.DB.Model(&models.Tenant{}).Where("owner_id = ?", ownerID)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("full_name LIKE ? OR phone LIKE ? OR cccd LIKE ? OR license_plates LIKE ?", searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+		query = query.Where("(full_name LIKE ? OR phone LIKE ? OR cccd LIKE ? OR license_plates LIKE ?)", searchKeyword, searchKeyword, searchKeyword, searchKeyword)
 	}
 
 	query.Count(&totalRecords)
@@ -36,12 +37,13 @@ func GetAllTenant(page int, pageSize int, search string) (map[string]interface{}
 	}, nil
 }
 
-func UpdateTenant(tenantID uint, updatedData map[string]interface{}) error {
+func UpdateTenant(ownerID uint, tenantID uint, updatedData map[string]interface{}) error {
 	var tenant models.Tenant
 
-	errFind := config.DB.First(&tenant, tenantID).Error
+	// KIỂM TRA BẢO MẬT
+	errFind := config.DB.Where("id = ? AND owner_id = ?", tenantID, ownerID).First(&tenant).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu khách hàng cần sửa")
+		return errors.New("không tìm thấy dữ liệu khách hàng hoặc bạn không có quyền sửa")
 	}
 
 	errUpdate := config.DB.Model(&tenant).Updates(updatedData).Error
@@ -52,12 +54,13 @@ func UpdateTenant(tenantID uint, updatedData map[string]interface{}) error {
 	return nil
 }
 
-func DeleteTenant(tenantID uint) error {
+func DeleteTenant(ownerID uint, tenantID uint) error {
 	var tenant models.Tenant
 
-	errFind := config.DB.First(&tenant, tenantID).Error
+	// KIỂM TRA BẢO MẬT
+	errFind := config.DB.Where("id = ? AND owner_id = ?", tenantID, ownerID).First(&tenant).Error
 	if errFind != nil {
-		return errors.New("không tìm thấy dữ liệu khách hàng cần xóa")
+		return errors.New("không tìm thấy dữ liệu khách hàng hoặc bạn không có quyền xóa")
 	}
 
 	errDelete := config.DB.Delete(&tenant).Error
@@ -67,20 +70,23 @@ func DeleteTenant(tenantID uint) error {
 
 	return nil
 }
+
 func CreateNewTenant(newTenant *models.Tenant) error {
 	if newTenant.CCCD != "" {
 		var existingCCCD models.Tenant
-		config.DB.Where("cccd = ?", newTenant.CCCD).First(&existingCCCD)
+		// CHỈ KIỂM TRA TRÙNG CCCD TRONG PHẠM VI KHÁCH CỦA CHỦ NÀY
+		config.DB.Where("cccd = ? AND owner_id = ?", newTenant.CCCD, newTenant.OwnerID).First(&existingCCCD)
 		if existingCCCD.ID != 0 {
-			return errors.New("Khách hàng với số CCCD này đã tồn tại")
+			return errors.New("Khách hàng với số CCCD này đã tồn tại trong danh sách của bạn")
 		}
 	}
 
 	if newTenant.Phone != "" {
 		var existingPhone models.Tenant
-		config.DB.Where("phone = ?", newTenant.Phone).First(&existingPhone)
+		// CHỈ KIỂM TRA TRÙNG SĐT TRONG PHẠM VI KHÁCH CỦA CHỦ NÀY
+		config.DB.Where("phone = ? AND owner_id = ?", newTenant.Phone, newTenant.OwnerID).First(&existingPhone)
 		if existingPhone.ID != 0 {
-			return errors.New("Số điện thoại này đã được đăng ký cho khách khác")
+			return errors.New("Số điện thoại này đã được đăng ký cho khách khác của bạn")
 		}
 	}
 

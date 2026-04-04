@@ -10,4 +10,5 @@ type Contract struct {
 	Status        string  `json:"status"`
 	Room          Room    `gorm:"foreignKey:RoomID" json:"Room"`
 	Tenant        Tenant  `gorm:"foreignKey:TenantID" json:"Tenant"`
+	Terms         string  `json:"terms"`
 }

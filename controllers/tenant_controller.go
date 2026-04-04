@@ -26,17 +26,37 @@ func GetAllTenantHandler(ginContext *gin.Context) {
 }
 
 func CreateTenantHandler(ginContext *gin.Context) {
-	var newTenant models.Tenant
+	ownerIDVal, _ := ginContext.Get("ownerID")
+	ownerID := ownerIDVal.(uint)
 
-	errBind := ginContext.ShouldBindJSON(&newTenant)
-	if errBind != nil {
-		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu đầu vào không hợp lệ")
-		return
+	// 1. ĐỌC DỮ LIỆU TỪ FORM-DATA THAY VÌ JSON
+	motorbikeCount, _ := strconv.Atoi(ginContext.PostForm("motorbike_count"))
+	carCount, _ := strconv.Atoi(ginContext.PostForm("car_count"))
+
+	newTenant := models.Tenant{
+		FullName:       ginContext.PostForm("full_name"),
+		CCCD:           ginContext.PostForm("cccd"),
+		Phone:          ginContext.PostForm("phone"),
+		Dob:            ginContext.PostForm("dob"),
+		Gender:         ginContext.PostForm("gender"),
+		Address:        ginContext.PostForm("address"),
+		LicensePlates:  ginContext.PostForm("license_plates"),
+		MotorbikeCount: motorbikeCount,
+		CarCount:       carCount,
+		OwnerID:        ownerID,
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	newTenant.OwnerID = ownerIDVal.(uint) // Gắn chủ sở hữu cho khách thuê
+	// 2. XỬ LÝ UPLOAD ẢNH (Nếu có)
+	file, errFile := ginContext.FormFile("image")
+	if errFile == nil {
+		// Gọi hàm từ upload_utils.go của bạn
+		imageURL, errUpload := utils.ProcessImageUpload(ginContext, file, "tenants", "")
+		if errUpload == nil {
+			newTenant.ImageUrl = imageURL
+		}
+	}
 
+	// 3. LƯU VÀO DATABASE
 	errCreate := services.CreateNewTenant(&newTenant)
 	if errCreate != nil {
 		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errCreate.Error())
@@ -53,15 +73,40 @@ func UpdateTenantHandler(ginContext *gin.Context) {
 		return
 	}
 
-	var updateData map[string]interface{}
-	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật không hợp lệ"})
-		return
-	}
-
 	ownerIDVal, _ := ginContext.Get("ownerID")
 	ownerID := ownerIDVal.(uint)
 
+	// 1. LẤY CÁC TRƯỜNG DỮ LIỆU MUỐN CẬP NHẬT
+	updateData := make(map[string]interface{})
+
+	textFields := []string{"full_name", "cccd", "phone", "dob", "gender", "address", "license_plates"}
+	for _, field := range textFields {
+		if val := ginContext.PostForm(field); val != "" {
+			updateData[field] = val
+		}
+	}
+
+	if val := ginContext.PostForm("motorbike_count"); val != "" {
+		mCount, _ := strconv.Atoi(val)
+		updateData["motorbike_count"] = mCount
+	}
+	if val := ginContext.PostForm("car_count"); val != "" {
+		cCount, _ := strconv.Atoi(val)
+		updateData["car_count"] = cCount
+	}
+
+	// 2. XỬ LÝ ẢNH MỚI NẾU CÓ THAY ĐỔI
+	file, errFile := ginContext.FormFile("image")
+	if errFile == nil {
+		// old_image_url được Angular gửi lên để Go xóa file cũ đi cho nhẹ server
+		oldImageURL := ginContext.PostForm("old_image_url")
+		imageURL, errUpload := utils.ProcessImageUpload(ginContext, file, "tenants", oldImageURL)
+		if errUpload == nil {
+			updateData["image_url"] = imageURL
+		}
+	}
+
+	// 3. GỌI SERVICE ĐỂ LƯU
 	errService := services.UpdateTenant(ownerID, uint(tenantID), updateData)
 	if errService != nil {
 		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})

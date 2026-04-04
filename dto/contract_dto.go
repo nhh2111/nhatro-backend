@@ -10,4 +10,5 @@ type CreateContractDTO struct {
 	StartDate     time.Time `json:"start_date"`
 	EndDate       time.Time `json:"end_date"`
 	DepositAmount float64   `json:"deposit_amount"`
+	Terms         string    `json:"terms"`
 }

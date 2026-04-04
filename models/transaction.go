@@ -12,4 +12,7 @@ type Transaction struct {
 	TransactionDate time.Time `json:"transaction_date"`
 	PayerPayeeName  string    `json:"payer_payee_name"`
 	Description     string    `json:"description"`
+
+	House House `gorm:"foreignKey:HouseID" json:"House"`
+	Room  Room  `gorm:"foreignKey:RoomID" json:"Room"`
 }

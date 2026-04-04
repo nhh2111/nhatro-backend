@@ -34,11 +34,13 @@ func AddTransactionHandler(ginContext *gin.Context) {
 func GetAllTransactionsHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
+	monthYear := ginContext.Query("month_year") // <-- BỔ SUNG DÒNG NÀY
 
 	ownerIDVal, _ := ginContext.Get("ownerID")
 	ownerID := ownerIDVal.(uint)
 
-	resultData, err := services.GetAllTransactions(ownerID, page, pageSize, search)
+	// TRUYỀN THÊM monthYear VÀO SERVICE
+	resultData, err := services.GetAllTransactions(ownerID, page, pageSize, search, monthYear)
 
 	if err != nil {
 		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi lấy danh sách giao dịch: "+err.Error())

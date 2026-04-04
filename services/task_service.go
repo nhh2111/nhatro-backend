@@ -5,6 +5,7 @@ import (
 	"doAnHTTT_go/models"
 	"doAnHTTT_go/utils"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -12,7 +13,6 @@ func GetAllTask(ownerID uint, page int, pageSize int, search string) (map[string
 	var taskList []models.Task
 	var totalRecords int64
 
-	// CHẶN BẢO MẬT TẠI ĐÂY
 	query := config.DB.Model(&models.Task{}).Preload("House").Preload("Room").Where("owner_id = ?", ownerID)
 
 	if search != "" {
@@ -50,7 +50,6 @@ func CreateNewTask(ownerID uint, newTask *models.Task) error {
 func UpdateTask(ownerID uint, taskID uint, updatedData map[string]interface{}) error {
 	var task models.Task
 
-	// KIỂM TRA QUYỀN SỞ HỮU
 	errFind := config.DB.Where("id = ? AND owner_id = ?", taskID, ownerID).First(&task).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu nhiệm vụ hoặc bạn không có quyền sửa")
@@ -67,6 +66,29 @@ func UpdateTask(ownerID uint, taskID uint, updatedData map[string]interface{}) e
 	errUpdate := config.DB.Model(&task).Updates(updatedData).Error
 	if errUpdate != nil {
 		return errors.New("lỗi khi cập nhật thông tin nhiệm vụ")
+	}
+
+	config.DB.First(&task, taskID)
+
+	if task.Status == "DONE" && task.Cost > 0 {
+		desc := fmt.Sprintf("Tự động chi trả bảo trì - Nhiệm vụ #%d: %s", task.ID, task.Title)
+
+		var existingTx models.Transaction
+		config.DB.Where("description = ?", desc).First(&existingTx)
+
+		if existingTx.ID == 0 {
+			newTx := models.Transaction{
+				HouseID:         &task.HouseID,
+				RoomID:          task.RoomID,
+				Type:            "EXPENSE",
+				Category:        "Sửa chữa & Bảo trì",
+				Amount:          task.Cost,
+				TransactionDate: time.Now(),
+				PayerPayeeName:  task.Assignee,
+				Description:     desc,
+			}
+			config.DB.Create(&newTx)
+		}
 	}
 
 	return nil

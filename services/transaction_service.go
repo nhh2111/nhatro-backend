@@ -39,7 +39,7 @@ func CreateNewTransaction(ownerID uint, dtoInput dto.CreateTransactionDTO) error
 	return nil
 }
 
-func GetAllTransactions(ownerID uint, page int, pageSize int, search string) (map[string]interface{}, error) {
+func GetAllTransactions(ownerID uint, page int, pageSize int, search string, monthYear string) (map[string]interface{}, error) {
 	var transactionList []models.Transaction
 	var totalRecords int64
 
@@ -51,14 +51,20 @@ func GetAllTransactions(ownerID uint, page int, pageSize int, search string) (ma
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("(transactions.type LIKE ? OR transactions.category LIKE ?)", searchKeyword, searchKeyword)
+		query = query.Where("(transactions.type LIKE ? OR transactions.category LIKE ? OR transactions.description LIKE ?)", searchKeyword, searchKeyword, searchKeyword)
+	}
+
+	// BỘ LỌC THEO THÁNG MỚI BỔ SUNG
+	if monthYear != "" {
+		// Sử dụng DATE_FORMAT để ép kiểu ngày giờ trong DB về dạng YYYY-MM chuẩn xác 100%
+		query = query.Where("DATE_FORMAT(transactions.transaction_date, '%Y-%m') = ?", monthYear)
 	}
 	query.Count(&totalRecords)
 
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	result := query.Offset(offset).Limit(pageSize).Order("transactions.id DESC").Find(&transactionList)
+	result := query.Offset(offset).Limit(pageSize).Order("transactions.transaction_date DESC, transactions.id DESC").Find(&transactionList)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -93,7 +99,6 @@ func UpdateTransaction(ownerID uint, transactionID uint, updatedData map[string]
 func DeleteTransaction(ownerID uint, transactionID uint) error {
 	var transaction models.Transaction
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Joins("JOIN houses ON transactions.house_id = houses.id").
 		Where("transactions.id = ? AND houses.owner_id = ?", transactionID, ownerID).
 		First(&transaction).Error

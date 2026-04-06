@@ -93,3 +93,37 @@ func PayInvoiceHandler(ginContext *gin.Context) {
 
 	ginContext.JSON(http.StatusOK, gin.H{"message": "Đã thu tiền và cập nhật hóa đơn thành công"})
 }
+
+type BankWebhookPayload struct {
+	Gateway            string  `json:"gateway"`
+	TransactionDate    string  `json:"transactionDate"`
+	AccountNumber      string  `json:"accountNumber"`
+	AmountIn           float64 `json:"amountIn"`
+	TransactionContent string  `json:"transactionContent"`
+	ReferenceCode      string  `json:"referenceCode"`
+}
+
+func WebhookBankTransferHandler(c *gin.Context) {
+	var payload BankWebhookPayload
+
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Payload không hợp lệ"})
+		return
+	}
+
+	if payload.AmountIn <= 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "Bỏ qua giao dịch chi tiền"})
+		return
+	}
+
+	err := services.ProcessBankWebhook(payload.AmountIn, payload.TransactionContent)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusOK, 200, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Gạch nợ hóa đơn thành công",
+	})
+}

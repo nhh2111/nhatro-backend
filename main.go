@@ -4,6 +4,7 @@ import (
 	"doAnHTTT_go/config"
 	"doAnHTTT_go/controllers"
 	"doAnHTTT_go/middlewares"
+	"doAnHTTT_go/services"
 	"log"
 	"os"
 	"time"
@@ -16,13 +17,12 @@ import (
 func main() {
 	godotenv.Load()
 	config.ConnectDatabase()
+	go services.CleanupUnverifiedUsersAndOTP()
 
 	router := gin.Default()
 
-	// CẤU HÌNH THƯ MỤC CHỨA ẢNH (BẮT BUỘC ĐỂ HIỂN THỊ AVATAR)
 	router.Static("/uploads", "./uploads")
 
-	// CORS
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
@@ -133,7 +133,6 @@ func main() {
 		generalRoutes.GET("/transactions", controllers.GetAllTransactionsHandler)
 		generalRoutes.POST("/transactions", controllers.AddTransactionHandler)
 
-		// API LIÊN QUAN ĐẾN PROFILE
 		generalRoutes.GET("/profile/me", controllers.GetMyProfileHandler)
 		generalRoutes.PUT("/profile/me", controllers.UpdateMyProfileHandler)
 		generalRoutes.PUT("/profile/password", controllers.ChangeMyPasswordHandler)
@@ -143,7 +142,11 @@ func main() {
 		generalRoutes.POST("/delete-file", controllers.DeleteImageHandler)
 	}
 
-	// RUN
+	webhookRoutes := router.Group("/api/webhooks")
+	{
+		webhookRoutes.POST("/bank-transfer", controllers.WebhookBankTransferHandler)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

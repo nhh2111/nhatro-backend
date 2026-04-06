@@ -51,7 +51,8 @@ func CreateNewMeterReading(ownerID uint, dtoInput dto.CreateMeterReadingDTO, use
 func GetMeterReadingsByMonth(ownerID uint, month string) ([]models.MeterReading, error) {
 	var readings []models.MeterReading
 
-	err := config.DB.Preload("Room").Preload("Service").
+	// ĐÃ SỬA: Thay Preload("Room") thành Preload("Room.House") để lấy tên Khu trọ
+	err := config.DB.Preload("Room.House").Preload("Service").
 		Joins("JOIN rooms ON meter_readings.room_id = rooms.id").
 		Joins("JOIN houses ON rooms.house_id = houses.id").
 		Where("meter_readings.billing_month = ? AND houses.owner_id = ?", month, ownerID).

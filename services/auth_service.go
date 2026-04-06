@@ -22,8 +22,38 @@ func RegisterOwner(email, password, fullName string) error {
 
 	var existingUser models.User
 	config.DB.Where("email = ?", email).First(&existingUser)
+
 	if existingUser.ID != 0 {
-		return errors.New("email này đã được đăng ký")
+		if existingUser.Status == true {
+			return errors.New("email này đã được đăng ký và kích hoạt")
+		}
+
+		hashedPassword, errHash := utils.HashPassword(password)
+		if errHash != nil {
+			return errors.New("lỗi khi mã hóa mật khẩu")
+		}
+
+		config.DB.Model(&existingUser).Updates(map[string]interface{}{
+			"password_hash": hashedPassword,
+			"full_name":     fullName,
+		})
+
+		config.DB.Where("email = ?", email).Delete(&models.OTP{})
+
+		otpCode, _ := utils.GenerateOTP()
+		newOTP := models.OTP{
+			Email:     email,
+			Code:      otpCode,
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+		}
+		config.DB.Create(&newOTP)
+
+		errEmail := utils.SendOTPEmail(email, otpCode, "Mã xác nhận đăng ký tài khoản", "Mã xác thực đăng ký tài khoản Hệ thống Quản lý Nhà Trọ của bạn là:")
+		if errEmail != nil {
+			return errors.New("tài khoản đã ghi đè nhưng không thể gửi email OTP")
+		}
+
+		return nil
 	}
 
 	hashedPassword, errHash := utils.HashPassword(password)
@@ -58,7 +88,7 @@ func RegisterOwner(email, password, fullName string) error {
 
 		errEmail := utils.SendOTPEmail(email, otpCode, "Mã xác nhận đăng ký tài khoản", "Mã xác thực đăng ký tài khoản Hệ thống Quản lý Nhà Trọ của bạn là:")
 		if errEmail != nil {
-			return errEmail // Bắt lỗi nếu gửi mail thất bại
+			return errEmail
 		}
 
 		return nil
@@ -72,13 +102,11 @@ func VerifyRegistrationOTP(email, otpCode string) error {
 		return errors.New("mã OTP không hợp lệ hoặc đã hết hạn")
 	}
 
-	// Cập nhật trạng thái User thành đã kích hoạt (status = true)
 	errUpdateUser := config.DB.Model(&models.User{}).Where("email = ?", email).Update("status", true).Error
 	if errUpdateUser != nil {
 		return errors.New("không thể kích hoạt tài khoản")
 	}
 
-	// Xóa vĩnh viễn dòng OTP này khỏi CSDL sau khi dùng xong
 	if err := config.DB.Delete(&validOTP).Error; err != nil {
 		return errors.New("không thể dọn dẹp mã OTP")
 	}
@@ -155,7 +183,6 @@ func ConfirmNewPassword(email, otpCode, newPassword string) error {
 		return errors.New("không thể cập nhật mật khẩu")
 	}
 
-	// Xóa vĩnh viễn dòng OTP này khỏi CSDL sau khi đổi pass thành công
 	config.DB.Delete(&validOTP)
 
 	return nil
@@ -189,4 +216,15 @@ func LoginUser(email string, password string) (string, string, bool, error) {
 	}
 
 	return accessToken, refreshToken, false, nil
+}
+
+func CleanupUnverifiedUsersAndOTP() {
+	for {
+		config.DB.Where("expires_at <= ? OR is_used = ?", time.Now(), true).Delete(&models.OTP{})
+
+		expirationTime := time.Now().Add(-15 * time.Minute)
+		config.DB.Where("status = ? AND created_at <= ?", false, expirationTime).Delete(&models.User{})
+
+		time.Sleep(10 * time.Minute)
+	}
 }

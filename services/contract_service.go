@@ -15,7 +15,7 @@ func GetAllContracts(ownerID uint, page int, pageSize int, search string) (map[s
 
 	// BẢO MẬT: CHỈ LẤY HỢP ĐỒNG THUỘC NHÀ CỦA OWNER NÀY
 	query := config.DB.Model(&models.Contract{}).
-		Preload("Room").Preload("Tenant").
+		Preload("Room").Preload("Tenant").Preload("Room.House").
 		Joins("JOIN rooms ON contracts.room_id = rooms.id").
 		Joins("JOIN houses ON rooms.house_id = houses.id").
 		Where("houses.owner_id = ?", ownerID)

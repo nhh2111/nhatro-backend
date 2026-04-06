@@ -14,4 +14,5 @@ type Room struct {
 	Description       string  `json:"description"`
 	Images            string  `json:"images"`
 	CurrentOccupants  int     `json:"current_occupants" gorm:"->"`
+	House             House   `gorm:"foreignKey:HouseID" json:"House"`
 }

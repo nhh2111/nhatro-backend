@@ -7,6 +7,8 @@ import (
 	"doAnHTTT_go/utils"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -17,7 +19,7 @@ func GetAllInvoices(ownerID uint, page int, pageSize int, monthYear string) (map
 	var totalRecords int64
 
 	query := config.DB.Model(&models.Invoice{}).
-		Preload("Items").Preload("Contract.Room").Preload("Contract.Tenant").
+		Preload("Items").Preload("Contract.Room.House").Preload("Contract.Tenant").
 		Joins("JOIN contracts ON invoices.contract_id = contracts.id").
 		Joins("JOIN rooms ON contracts.room_id = rooms.id").
 		Joins("JOIN houses ON rooms.house_id = houses.id").
@@ -45,7 +47,6 @@ func GetAllInvoices(ownerID uint, page int, pageSize int, monthYear string) (map
 	}, nil
 }
 
-// Hàm GenerateInvoice giữ nguyên nội tại vì nó được gọi bởi AutoGenerateInvoices (đã được bọc bảo mật)
 func GenerateInvoice(roomID uint, monthYear string) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var room models.Room
@@ -58,9 +59,14 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 			return errors.New("phòng không có hợp đồng nào đang hoạt động")
 		}
 
+		// ĐÃ SỬA LOGIC: Kiểm tra sự tồn tại của hóa đơn dựa trên PHÒNG và THÁNG, thay vì HỢP ĐỒNG và THÁNG
 		var existing models.Invoice
-		tx.Where("contract_id = ? AND month_year = ?", repContract.ID, monthYear).First(&existing)
+		tx.Joins("JOIN contracts ON invoices.contract_id = contracts.id").
+			Where("contracts.room_id = ? AND invoices.month_year = ?", roomID, monthYear).
+			First(&existing)
+
 		if existing.ID != 0 {
+			// Đã có hóa đơn cho phòng này trong tháng này rồi -> Bỏ qua không tạo thêm!
 			return nil
 		}
 
@@ -236,6 +242,67 @@ func PayInvoice(ownerID uint, dtoInput dto.PayInvoiceDTO) error {
 		if errTx := tx.Create(&incomeTx).Error; errTx != nil {
 			return errors.New("lỗi tạo phiếu thu: " + errTx.Error())
 		}
+		return nil
+	})
+}
+
+func ProcessBankWebhook(amountIn float64, transactionContent string) error {
+	re := regexp.MustCompile(`(?i)HD\s*(\d+)`)
+	matches := re.FindStringSubmatch(transactionContent)
+
+	if len(matches) < 2 {
+		return errors.New("bỏ qua: không tìm thấy mã hóa đơn (Cú pháp HD...) trong nội dung")
+	}
+
+	invoiceIDStr := matches[1]
+	invoiceID, _ := strconv.Atoi(invoiceIDStr)
+
+	return config.DB.Transaction(func(tx *gorm.DB) error {
+		var invoice models.Invoice
+
+		err := tx.Preload("Contract.Room").
+			Joins("JOIN contracts ON invoices.contract_id = contracts.id").
+			Joins("JOIN rooms ON contracts.room_id = rooms.id").
+			First(&invoice, invoiceID).Error
+
+		if err != nil {
+			return errors.New("bỏ qua: không tìm thấy hóa đơn số " + invoiceIDStr)
+		}
+
+		if invoice.Status == "PAID" {
+			return errors.New("bỏ qua: hóa đơn này đã được thanh toán trước đó")
+		}
+
+		newPaidAmount := invoice.PaidAmount + amountIn
+		newStatus := "PARTIAL"
+		if newPaidAmount >= invoice.TotalAmount {
+			newStatus = "PAID"
+		}
+
+		if errUpdate := tx.Model(&invoice).Updates(map[string]interface{}{
+			"paid_amount": newPaidAmount,
+			"status":      newStatus,
+		}).Error; errUpdate != nil {
+			return errors.New("lỗi cập nhật hóa đơn")
+		}
+
+		houseID := invoice.Contract.Room.HouseID
+		roomID := invoice.Contract.RoomID
+
+		incomeTx := models.Transaction{
+			HouseID:         &houseID,
+			RoomID:          &roomID,
+			Type:            "INCOME",
+			Category:        "Chuyển khoản Ngân hàng",
+			Amount:          amountIn,
+			TransactionDate: time.Now(),
+			Description:     fmt.Sprintf("Auto-Pay: Hóa đơn #%d - P.%s (%s)", invoice.ID, invoice.Contract.Room.RoomNumber, transactionContent),
+		}
+
+		if errTx := tx.Create(&incomeTx).Error; errTx != nil {
+			return errors.New("lỗi tạo phiếu thu tự động")
+		}
+
 		return nil
 	})
 }

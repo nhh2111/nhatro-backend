@@ -43,17 +43,17 @@ func main() {
 	})
 
 	healthHandler := func(c *gin.Context) {
-		sqlDB, err := config.DB.DB()
-		dbStatus := "connected"
+		// sqlDB, err := config.DB.DB()
+		// dbStatus := "connected"
 
-		if err != nil || sqlDB.Ping() != nil {
-			dbStatus = "disconnected"
-		}
+		// if err != nil || sqlDB.Ping() != nil {
+		// 	dbStatus = "disconnected"
+		// }
 
 		c.JSON(200, gin.H{
-			"status":   "ok",
-			"database": dbStatus,
-			"message":  "Hệ thống đang hoạt động",
+			"status": "ok",
+			// "database": dbStatus,
+			"message": "Hệ thống đang hoạt động",
 		})
 	}
 

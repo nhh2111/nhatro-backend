@@ -67,25 +67,45 @@ func CreateNewRoom(ownerID uint, newRoom *models.Room) error {
 		return err
 	}
 
-	var defaultServices []models.Service
+	defaultServices := []struct {
+		Name        string
+		ServiceType string
+		Unit        string
+	}{
+		{"Điện", "METER", "kWh"},
+		{"Nước", "METER", "Khối"},
+		{"Rác & Vệ sinh", "FIXED", "Tháng"},
+	}
 
-	tx.Where("owner_id = ? AND name IN (?, ?, ?)", ownerID, "Điện", "Nước", "Rác & Vệ sinh").Find(&defaultServices)
+	for _, ds := range defaultServices {
+		var srv models.Service
+		err := tx.Where("owner_id = ? AND name = ?", ownerID, ds.Name).First(&srv).Error
 
-	if len(defaultServices) > 0 {
-		for _, srv := range defaultServices {
-			roomService := models.RoomService{
-				RoomID:    newRoom.ID,
-				ServiceID: srv.ID,
+		if err != nil {
+			srv = models.Service{
+				Name:        ds.Name,
+				ServiceType: ds.ServiceType,
+				UnitPrice:   0,
+				Unit:        ds.Unit,
+				OwnerID:     ownerID,
 			}
-			if err := tx.Create(&roomService).Error; err != nil {
+			if err := tx.Create(&srv).Error; err != nil {
 				tx.Rollback()
-				return errors.New("lỗi khi tự động gán dịch vụ cho phòng")
+				return errors.New("lỗi khi khởi tạo dịch vụ mặc định")
 			}
+		}
+
+		roomService := models.RoomService{
+			RoomID:    newRoom.ID,
+			ServiceID: srv.ID,
+		}
+		if err := tx.Create(&roomService).Error; err != nil {
+			tx.Rollback()
+			return errors.New("lỗi khi tự động gán dịch vụ cho phòng")
 		}
 	}
 
 	tx.Commit()
-
 	return nil
 }
 

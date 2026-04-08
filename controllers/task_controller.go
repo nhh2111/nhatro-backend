@@ -4,7 +4,10 @@ import (
 	"doAnHTTT_go/models"
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
+	"fmt"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -91,4 +94,32 @@ func DeleteTaskHandler(ginContext *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa nhiệm vụ thành công"})
+}
+
+func UploadTaskImageHandler(ginContext *gin.Context) {
+	file, err := ginContext.FormFile("image")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Không tìm thấy file ảnh đính kèm")
+		return
+	}
+
+	uploadDir := "uploads/tasks"
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Lỗi server không thể tạo thư mục lưu ảnh")
+		return
+	}
+
+	filename := fmt.Sprintf("%d_%s", time.Now().Unix(), file.Filename)
+	filepath := fmt.Sprintf("%s/%s", uploadDir, filename)
+
+	if err := ginContext.SaveUploadedFile(file, filepath); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Không thể lưu file ảnh")
+		return
+	}
+
+	imageUrl := "/" + filepath
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{
+		"message":   "Upload ảnh thành công",
+		"image_url": imageUrl,
+	})
 }

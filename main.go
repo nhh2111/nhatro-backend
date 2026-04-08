@@ -38,6 +38,10 @@ func main() {
 		})
 	})
 
+	router.HEAD("/", func(c *gin.Context) {
+		c.Status(200)
+	})
+
 	healthHandler := func(c *gin.Context) {
 		sqlDB, err := config.DB.DB()
 		dbStatus := "connected"
@@ -119,6 +123,8 @@ func main() {
 		generalRoutes.POST("/tasks", controllers.CreateTaskHandler)
 		generalRoutes.PUT("/tasks/:id", controllers.UpdateTaskHandler)
 		generalRoutes.DELETE("/tasks/:id", controllers.DeleteTaskHandler)
+
+		generalRoutes.POST("/tasks/upload-image", controllers.UploadTaskImageHandler)
 
 		generalRoutes.POST("/meter-readings", controllers.AddMeterReadingHandler)
 		generalRoutes.GET("/meter-readings", controllers.GetMeterReadingsHandler)

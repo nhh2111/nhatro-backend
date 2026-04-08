@@ -8,6 +8,7 @@ type Task struct {
 	RoomID     *uint      `json:"room_id"`
 	Title      string     `json:"title"`
 	Content    string     `json:"content"`
+	ImageUrl   string     `json:"image_url"`
 	Status     string     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
 	FinishedAt *time.Time `json:"finished_at"`

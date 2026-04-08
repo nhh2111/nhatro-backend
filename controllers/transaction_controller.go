@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,20 +14,22 @@ func AddTransactionHandler(ginContext *gin.Context) {
 
 	errBind := ginContext.ShouldBindJSON(&requestData)
 	if errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu phiếu thu/chi không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu phiếu thu/chi không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errService := services.CreateNewTransaction(ownerID, requestData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{"message": "Ghi nhận phiếu thu/chi thành công"})
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{"message": "Ghi nhận phiếu thu/chi thành công"})
 }
 
 func GetAllTransactionsHandler(ginContext *gin.Context) {
@@ -36,8 +37,10 @@ func GetAllTransactionsHandler(ginContext *gin.Context) {
 	search := ginContext.Query("search")
 	monthYear := ginContext.Query("month_year") // <-- BỔ SUNG DÒNG NÀY
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	// TRUYỀN THÊM monthYear VÀO SERVICE
 	resultData, err := services.GetAllTransactions(ownerID, page, pageSize, search, monthYear)
@@ -51,43 +54,47 @@ func GetAllTransactionsHandler(ginContext *gin.Context) {
 }
 
 func UpdateTransactionHandler(ginContext *gin.Context) {
-	txID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+	txID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
 		return
 	}
 
 	var updateData map[string]interface{}
 	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.UpdateTransaction(ownerID, uint(txID), updateData)
+	errService := services.UpdateTransaction(ownerID, txID, updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật phiếu thu chi thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật phiếu thu chi thành công"})
 }
 
 func DeleteTransactionHandler(ginContext *gin.Context) {
-	txID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID không hợp lệ"})
+	txID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteTransaction(ownerID, uint(txID))
+	errService := services.DeleteTransaction(ownerID, txID)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa phiếu thu chi thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa phiếu thu chi thành công"})
 }

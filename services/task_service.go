@@ -41,7 +41,7 @@ func CreateNewTask(ownerID uint, newTask *models.Task) error {
 	if newTask.Status == "" {
 		newTask.Status = "OPEN"
 	}
-	newTask.OwnerID = ownerID // Gán chủ sở hữu cho task mới
+	newTask.OwnerID = ownerID
 
 	result := config.DB.Create(newTask)
 	return result.Error
@@ -97,7 +97,6 @@ func UpdateTask(ownerID uint, taskID uint, updatedData map[string]interface{}) e
 func DeleteTask(ownerID uint, taskID uint) error {
 	var task models.Task
 
-	// KIỂM TRA QUYỀN SỞ HỮU
 	errFind := config.DB.Where("id = ? AND owner_id = ?", taskID, ownerID).First(&task).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy nhiệm vụ hoặc bạn không có quyền xóa")

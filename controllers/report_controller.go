@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"doAnHTTT_go/services"
+	"doAnHTTT_go/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,21 +13,20 @@ func GetProfitLossHandler(ginContext *gin.Context) {
 	year := ginContext.Query("year")
 
 	if month == "" || year == "" {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng cung cấp tháng và năm cần thống kê"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Vui lòng cung cấp tháng và năm cần thống kê")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	reportData, errService := services.GetProfitLossReport(ownerID, month, year)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   reportData,
-	})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"data": reportData})
 }

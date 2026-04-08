@@ -14,8 +14,10 @@ func GetAllTenantHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllTenant(ownerID, page, pageSize, search)
 	if err != nil {
@@ -26,8 +28,10 @@ func GetAllTenantHandler(ginContext *gin.Context) {
 }
 
 func CreateTenantHandler(ginContext *gin.Context) {
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	// 1. ĐỌC DỮ LIỆU TỪ FORM-DATA THAY VÌ JSON
 	motorbikeCount, _ := strconv.Atoi(ginContext.PostForm("motorbike_count"))
@@ -67,14 +71,16 @@ func CreateTenantHandler(ginContext *gin.Context) {
 }
 
 func UpdateTenantHandler(ginContext *gin.Context) {
-	tenantID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID khách hàng không hợp lệ"})
+	tenantID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID khách hàng không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	// 1. LẤY CÁC TRƯỜNG DỮ LIỆU MUỐN CẬP NHẬT
 	updateData := make(map[string]interface{})
@@ -107,30 +113,32 @@ func UpdateTenantHandler(ginContext *gin.Context) {
 	}
 
 	// 3. GỌI SERVICE ĐỂ LƯU
-	errService := services.UpdateTenant(ownerID, uint(tenantID), updateData)
+	errService := services.UpdateTenant(ownerID, tenantID, updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật khách hàng thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật khách hàng thành công"})
 }
 
 func DeleteTenantHandler(ginContext *gin.Context) {
-	tenantID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID khách hàng không hợp lệ"})
+	tenantID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID khách hàng không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteTenant(ownerID, uint(tenantID))
+	errService := services.DeleteTenant(ownerID, tenantID)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa khách hàng thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa khách hàng thành công"})
 }

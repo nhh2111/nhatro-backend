@@ -124,6 +124,7 @@ func main() {
 		generalRoutes.GET("/meter-readings", controllers.GetMeterReadingsHandler)
 		generalRoutes.PUT("/meter-readings/:id", controllers.UpdateMeterReadingHandler)
 		generalRoutes.DELETE("/meter-readings/:id", controllers.DeleteMeterReadingHandler)
+		generalRoutes.GET("/meter-readings/latest-index", controllers.GetLatestIndexHandler)
 
 		generalRoutes.GET("/invoices", controllers.GetAllInvoicesHandler)
 		generalRoutes.POST("/invoices/generate", controllers.TriggerGenerateInvoices)
@@ -140,6 +141,7 @@ func main() {
 
 		generalRoutes.POST("/upload-multiple", controllers.UploadMultipleImagesHandler)
 		generalRoutes.POST("/delete-file", controllers.DeleteImageHandler)
+
 	}
 
 	webhookRoutes := router.Group("/api/webhooks")

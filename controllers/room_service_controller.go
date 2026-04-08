@@ -5,16 +5,21 @@ import (
 	"doAnHTTT_go/models"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetServicesOfRoomHandler(c *gin.Context) {
-	roomID := c.Param("id")
+	roomID, err := utils.ParseUintParam(c, "id")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "ID phòng không hợp lệ")
+		return
+	}
 
-	ownerIDVal, _ := c.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(c)
+	if !ok {
+		return
+	}
 
 	// CHẶN BẢO MẬT: Kiểm tra phòng này có phải của chủ trọ không
 	var count int64
@@ -41,10 +46,9 @@ func GetServicesOfRoomHandler(c *gin.Context) {
 }
 
 func AssignServicesToRoomHandler(c *gin.Context) {
-	roomIDStr := c.Param("id")
-	roomID, errParse := strconv.Atoi(roomIDStr)
-	if errParse != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ID phòng không hợp lệ"})
+	roomID, err := utils.ParseUintParam(c, "id")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "ID phòng không hợp lệ")
 		return
 	}
 
@@ -52,12 +56,14 @@ func AssignServicesToRoomHandler(c *gin.Context) {
 		ServiceIDs []uint `json:"service_ids"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := c.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(c)
+	if !ok {
+		return
+	}
 
 	// CHẶN BẢO MẬT
 	var count int64
@@ -65,7 +71,7 @@ func AssignServicesToRoomHandler(c *gin.Context) {
 		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).Count(&count)
 
 	if count == 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Phòng không hợp lệ hoặc bạn không có quyền"})
+		utils.ErrorResponse(c, http.StatusForbidden, 403, "Phòng không hợp lệ hoặc bạn không có quyền")
 		return
 	}
 
@@ -73,22 +79,22 @@ func AssignServicesToRoomHandler(c *gin.Context) {
 
 	if err := tx.Where("room_id = ?", roomID).Delete(&models.RoomService{}).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi khi dọn dẹp dịch vụ cũ"})
+		utils.ErrorResponse(c, http.StatusInternalServerError, 500, "Lỗi khi dọn dẹp dịch vụ cũ")
 		return
 	}
 
 	for _, srvID := range request.ServiceIDs {
 		newRS := models.RoomService{
-			RoomID:    uint(roomID),
+			RoomID:    roomID,
 			ServiceID: srvID,
 		}
 		if err := tx.Create(&newRS).Error; err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi khi gán dịch vụ mới"})
+			utils.ErrorResponse(c, http.StatusInternalServerError, 500, "Lỗi khi gán dịch vụ mới")
 			return
 		}
 	}
 
 	tx.Commit()
-	c.JSON(http.StatusOK, gin.H{"message": "Cập nhật dịch vụ cho phòng thành công"})
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Cập nhật dịch vụ cho phòng thành công"})
 }

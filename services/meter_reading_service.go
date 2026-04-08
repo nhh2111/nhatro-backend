@@ -13,7 +13,6 @@ func CreateNewMeterReading(ownerID uint, dtoInput dto.CreateMeterReadingDTO, use
 		return errors.New("chỉ số mới không được nhỏ hơn chỉ số cũ")
 	}
 
-	// KIỂM TRA BẢO MẬT: Phòng này có thuộc về nhà của Owner không?
 	var roomCount int64
 	config.DB.Table("rooms").Joins("JOIN houses ON rooms.house_id = houses.id").
 		Where("rooms.id = ? AND houses.owner_id = ?", dtoInput.RoomID, ownerID).Count(&roomCount)
@@ -31,10 +30,22 @@ func CreateNewMeterReading(ownerID uint, dtoInput dto.CreateMeterReadingDTO, use
 		}
 	}
 
+	billingMonth := dtoInput.ReadingDate.Format("2006-01")
+
+	var existCount int64
+	config.DB.Model(&models.MeterReading{}).
+		Where("room_id = ? AND service_id = ? AND billing_month = ?", dtoInput.RoomID, dtoInput.ServiceID, billingMonth).
+		Count(&existCount)
+
+	if existCount > 0 {
+		return errors.New("Phòng này đã được ghi chỉ số cho dịch vụ này trong tháng rồi!")
+	}
+	// ---------------------------------------------------------
+
 	newReading := models.MeterReading{
 		RoomID:       dtoInput.RoomID,
 		ServiceID:    dtoInput.ServiceID,
-		BillingMonth: dtoInput.ReadingDate.Format("2006-01"),
+		BillingMonth: billingMonth,
 		ReadingDate:  dtoInput.ReadingDate.Format("2006-01-02"),
 		OldIndex:     dtoInput.OldIndex,
 		NewIndex:     dtoInput.NewIndex,
@@ -51,7 +62,6 @@ func CreateNewMeterReading(ownerID uint, dtoInput dto.CreateMeterReadingDTO, use
 func GetMeterReadingsByMonth(ownerID uint, month string) ([]models.MeterReading, error) {
 	var readings []models.MeterReading
 
-	// ĐÃ SỬA: Thay Preload("Room") thành Preload("Room.House") để lấy tên Khu trọ
 	err := config.DB.Preload("Room.House").Preload("Service").
 		Joins("JOIN rooms ON meter_readings.room_id = rooms.id").
 		Joins("JOIN houses ON rooms.house_id = houses.id").
@@ -81,8 +91,22 @@ func UpdateMeterReading(ownerID uint, id uint, dtoInput dto.CreateMeterReadingDT
 		return errors.New("chỉ số mới không được nhỏ hơn chỉ số cũ")
 	}
 
+	newBillingMonth := dtoInput.ReadingDate.Format("2006-01")
+
+	if reading.BillingMonth != newBillingMonth {
+		var existCount int64
+		config.DB.Model(&models.MeterReading{}).
+			Where("room_id = ? AND service_id = ? AND billing_month = ? AND id != ?", reading.RoomID, reading.ServiceID, newBillingMonth, id).
+			Count(&existCount)
+
+		if existCount > 0 {
+			return errors.New("Không thể đổi ngày vì phòng này đã có chỉ số trong tháng đó rồi!")
+		}
+	}
+	// ------------------------------------------------------------------------
+
 	reading.ReadingDate = dtoInput.ReadingDate.Format("2006-01-02")
-	reading.BillingMonth = dtoInput.ReadingDate.Format("2006-01")
+	reading.BillingMonth = newBillingMonth
 	reading.OldIndex = dtoInput.OldIndex
 	reading.NewIndex = dtoInput.NewIndex
 	reading.UsageValue = dtoInput.NewIndex - dtoInput.OldIndex
@@ -109,4 +133,16 @@ func DeleteMeterReading(ownerID uint, id uint) error {
 		return errors.New("lỗi khi xóa chỉ số")
 	}
 	return nil
+}
+
+func GetLatestOldIndex(roomID uint, serviceID uint, beforeDate string) float64 {
+	var reading models.MeterReading
+	err := config.DB.Where("room_id = ? AND service_id = ? AND reading_date < ?", roomID, serviceID, beforeDate).
+		Order("reading_date DESC").
+		First(&reading).Error
+
+	if err != nil {
+		return 0
+	}
+	return reading.NewIndex
 }

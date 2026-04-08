@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,8 +17,10 @@ func GetAllInvoicesHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	monthYear := ginContext.Query("month_year")
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllInvoices(ownerID, page, pageSize, monthYear)
 
@@ -34,64 +35,70 @@ func GetAllInvoicesHandler(ginContext *gin.Context) {
 func TriggerGenerateInvoices(c *gin.Context) {
 	var req InvoiceReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Thiếu tháng cần chốt sổ"})
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Thiếu tháng cần chốt sổ")
 		return
 	}
 
-	ownerIDVal, _ := c.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(c)
+	if !ok {
+		return
+	}
 
 	errService := services.AutoGenerateInvoices(ownerID, req.MonthYear)
 	if errService != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(c, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Đã chốt sổ hóa đơn thành công cho tháng " + req.MonthYear})
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Đã chốt sổ hóa đơn thành công cho tháng " + req.MonthYear})
 }
 
 func DeleteInvoiceHandler(ginContext *gin.Context) {
-	invoiceIDParam := ginContext.Param("id")
-	invoiceID, errParse := strconv.Atoi(invoiceIDParam)
-
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID hóa đơn không hợp lệ"})
+	invoiceID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID hóa đơn không hợp lệ")
 		return
 	}
 
-	roleVal, _ := ginContext.Get("userRole")
-	userRole := roleVal.(string)
+	userRole, ok := utils.RequireUserRole(ginContext)
+	if !ok {
+		return
+	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteInvoice(ownerID, uint(invoiceID), userRole)
+	errService := services.DeleteInvoice(ownerID, invoiceID, userRole)
 	if errService != nil {
-		ginContext.JSON(http.StatusForbidden, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusForbidden, 403, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Đã xóa hóa đơn thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Đã xóa hóa đơn thành công"})
 }
 
 func PayInvoiceHandler(ginContext *gin.Context) {
 	var requestData dto.PayInvoiceDTO
 
 	if errBind := ginContext.ShouldBindJSON(&requestData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu thanh toán không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu thanh toán không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errService := services.PayInvoice(ownerID, requestData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Đã thu tiền và cập nhật hóa đơn thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Đã thu tiền và cập nhật hóa đơn thành công"})
 }
 
 type BankWebhookPayload struct {
@@ -107,12 +114,12 @@ func WebhookBankTransferHandler(c *gin.Context) {
 	var payload BankWebhookPayload
 
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Payload không hợp lệ"})
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Payload không hợp lệ")
 		return
 	}
 
 	if payload.AmountIn <= 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "Bỏ qua giao dịch chi tiền"})
+		utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Bỏ qua giao dịch chi tiền"})
 		return
 	}
 
@@ -122,8 +129,5 @@ func WebhookBankTransferHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Gạch nợ hóa đơn thành công",
-	})
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"success": true, "message": "Gạch nợ hóa đơn thành công"})
 }

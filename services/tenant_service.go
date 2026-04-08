@@ -11,7 +11,6 @@ func GetAllTenant(ownerID uint, page int, pageSize int, search string) (map[stri
 	var tenantList []models.Tenant
 	var totalRecords int64
 
-	// LỌC THEO OWNER_ID
 	query := config.DB.Model(&models.Tenant{}).Where("owner_id = ?", ownerID)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
@@ -40,7 +39,6 @@ func GetAllTenant(ownerID uint, page int, pageSize int, search string) (map[stri
 func UpdateTenant(ownerID uint, tenantID uint, updatedData map[string]interface{}) error {
 	var tenant models.Tenant
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Where("id = ? AND owner_id = ?", tenantID, ownerID).First(&tenant).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu khách hàng hoặc bạn không có quyền sửa")
@@ -57,7 +55,6 @@ func UpdateTenant(ownerID uint, tenantID uint, updatedData map[string]interface{
 func DeleteTenant(ownerID uint, tenantID uint) error {
 	var tenant models.Tenant
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Where("id = ? AND owner_id = ?", tenantID, ownerID).First(&tenant).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu khách hàng hoặc bạn không có quyền xóa")
@@ -74,7 +71,6 @@ func DeleteTenant(ownerID uint, tenantID uint) error {
 func CreateNewTenant(newTenant *models.Tenant) error {
 	if newTenant.CCCD != "" {
 		var existingCCCD models.Tenant
-		// CHỈ KIỂM TRA TRÙNG CCCD TRONG PHẠM VI KHÁCH CỦA CHỦ NÀY
 		config.DB.Where("cccd = ? AND owner_id = ?", newTenant.CCCD, newTenant.OwnerID).First(&existingCCCD)
 		if existingCCCD.ID != 0 {
 			return errors.New("Khách hàng với số CCCD này đã tồn tại trong danh sách của bạn")
@@ -83,7 +79,6 @@ func CreateNewTenant(newTenant *models.Tenant) error {
 
 	if newTenant.Phone != "" {
 		var existingPhone models.Tenant
-		// CHỈ KIỂM TRA TRÙNG SĐT TRONG PHẠM VI KHÁCH CỦA CHỦ NÀY
 		config.DB.Where("phone = ? AND owner_id = ?", newTenant.Phone, newTenant.OwnerID).First(&existingPhone)
 		if existingPhone.ID != 0 {
 			return errors.New("Số điện thoại này đã được đăng ký cho khách khác của bạn")

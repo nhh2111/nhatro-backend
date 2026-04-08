@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,8 +13,10 @@ func GetAllServiceHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllService(ownerID, page, pageSize, search)
 
@@ -32,74 +33,72 @@ func CreateServiceHandler(ginContext *gin.Context) {
 
 	errBind := ginContext.ShouldBindJSON(&newService)
 	if errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{
-			"status":  "error",
-			"message": "Dữ liệu đầu vào không hợp lệ",
-			"detail":  errBind.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu đầu vào không hợp lệ: "+errBind.Error())
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	newService.OwnerID = ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
+	newService.OwnerID = ownerID
 
 	errCreate := services.CreateNewService(&newService)
 	if errCreate != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "Không thể tạo dịch vụ mới",
-			"detail":  errCreate.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Không thể tạo dịch vụ mới: "+errCreate.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{
 		"message": "Tạo dịch vụ mới thành công",
 		"data":    newService,
 	})
 }
 
 func UpdateServiceHandler(ginContext *gin.Context) {
-	serviceID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID dịch vụ không hợp lệ"})
+	serviceID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID dịch vụ không hợp lệ")
 		return
 	}
 
 	var updateData map[string]interface{}
 	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu cập nhật không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.UpdateService(ownerID, uint(serviceID), updateData)
+	errService := services.UpdateService(ownerID, serviceID, updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật dịch vụ thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật dịch vụ thành công"})
 }
 
 func DeleteServiceHandler(ginContext *gin.Context) {
-	serviceID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID dịch vụ không hợp lệ"})
+	serviceID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID dịch vụ không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteService(ownerID, uint(serviceID))
+	errService := services.DeleteService(ownerID, serviceID)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa dịch vụ thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa dịch vụ thành công"})
 }

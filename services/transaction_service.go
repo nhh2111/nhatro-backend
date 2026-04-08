@@ -14,7 +14,6 @@ func CreateNewTransaction(ownerID uint, dtoInput dto.CreateTransactionDTO) error
 		return errors.New("loại giao dịch chỉ được phép là INCOME (Thu) hoặc EXPENSE (Chi)")
 	}
 
-	// KIỂM TRA BẢO MẬT: Nhà này có thuộc về ownerID không?
 	var house models.House
 	if err := config.DB.Where("id = ? AND owner_id = ?", dtoInput.HouseID, ownerID).First(&house).Error; err != nil {
 		return errors.New("khu trọ không hợp lệ hoặc bạn không có quyền thêm giao dịch vào đây")
@@ -43,7 +42,6 @@ func GetAllTransactions(ownerID uint, page int, pageSize int, search string, mon
 	var transactionList []models.Transaction
 	var totalRecords int64
 
-	// JOIN SANG NHÀ ĐỂ LỌC THEO CHỦ
 	query := config.DB.Model(&models.Transaction{}).
 		Preload("House").Preload("Room").
 		Joins("JOIN houses ON transactions.house_id = houses.id").
@@ -54,9 +52,7 @@ func GetAllTransactions(ownerID uint, page int, pageSize int, search string, mon
 		query = query.Where("(transactions.type LIKE ? OR transactions.category LIKE ? OR transactions.description LIKE ?)", searchKeyword, searchKeyword, searchKeyword)
 	}
 
-	// BỘ LỌC THEO THÁNG MỚI BỔ SUNG
 	if monthYear != "" {
-		// Sử dụng DATE_FORMAT để ép kiểu ngày giờ trong DB về dạng YYYY-MM chuẩn xác 100%
 		query = query.Where("DATE_FORMAT(transactions.transaction_date, '%Y-%m') = ?", monthYear)
 	}
 	query.Count(&totalRecords)
@@ -80,7 +76,6 @@ func GetAllTransactions(ownerID uint, page int, pageSize int, search string, mon
 func UpdateTransaction(ownerID uint, transactionID uint, updatedData map[string]interface{}) error {
 	var transaction models.Transaction
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Joins("JOIN houses ON transactions.house_id = houses.id").
 		Where("transactions.id = ? AND houses.owner_id = ?", transactionID, ownerID).
 		First(&transaction).Error

@@ -1,1 +1,10 @@
 .env
+
+# uploads: không track file người dùng upload
+uploads/
+
+# artifacts
+*.log
+*.exe
+*.out
+*.test

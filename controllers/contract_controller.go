@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,9 +13,10 @@ func GetAllContractHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	// Lấy ownerID từ context
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllContracts(ownerID, page, pageSize, search)
 
@@ -31,32 +31,37 @@ func GetAllContractHandler(ginContext *gin.Context) {
 func CreateContractHandler(c *gin.Context) {
 	var contract models.Contract
 	if err := c.ShouldBindJSON(&contract); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu hợp đồng không hợp lệ"})
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "Dữ liệu hợp đồng không hợp lệ")
 		return
 	}
 
-	// Lấy ownerID từ context
-	ownerIDVal, _ := c.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(c)
+	if !ok {
+		return
+	}
 
 	if err := services.CreateContract(ownerID, &contract); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Lập hợp đồng thành công! Phòng đã được chuyển sang trạng thái Đang Thuê."})
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Lập hợp đồng thành công! Phòng đã được chuyển sang trạng thái Đang Thuê."})
 }
 
-// API dùng để thanh lý / kết thúc hợp đồng
 func TerminateContractHandler(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-
-	// Lấy ownerID từ context
-	ownerIDVal, _ := c.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
-
-	if err := services.TerminateContract(ownerID, uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	contractID, err := utils.ParseUintParam(c, "id")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, 400, "ID không hợp lệ")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Thanh lý hợp đồng thành công! Phòng đã được trống."})
+
+	ownerID, ok := utils.RequireOwnerID(c)
+	if !ok {
+		return
+	}
+
+	if err := services.TerminateContract(ownerID, contractID); err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, 500, err.Error())
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Thanh lý hợp đồng thành công! Phòng đã được trống."})
 }

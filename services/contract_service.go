@@ -13,16 +13,16 @@ func GetAllContracts(ownerID uint, page int, pageSize int, search string) (map[s
 	var contractList []models.Contract
 	var totalRecords int64
 
-	// BẢO MẬT: CHỈ LẤY HỢP ĐỒNG THUỘC NHÀ CỦA OWNER NÀY
 	query := config.DB.Model(&models.Contract{}).
 		Preload("Room").Preload("Tenant").Preload("Room.House").
 		Joins("JOIN rooms ON contracts.room_id = rooms.id").
+		Joins("JOIN tenants ON contracts.tenant_id = tenants.id").
 		Joins("JOIN houses ON rooms.house_id = houses.id").
 		Where("houses.owner_id = ?", ownerID)
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("(rooms.room_number LIKE ? OR tenants.full_name LIKE ?)", searchKeyword, searchKeyword)
+		query = query.Where("(rooms.room_number LIKE ? OR tenants.full_name LIKE ? OR houses.name LIKE ?)", searchKeyword, searchKeyword, searchKeyword)
 	}
 
 	query.Count(&totalRecords)
@@ -30,7 +30,6 @@ func GetAllContracts(ownerID uint, page int, pageSize int, search string) (map[s
 	pageCount := utils.GetPageCount(totalRecords, pageSize)
 	offset := utils.GetOffset(page, pageSize)
 
-	// Thêm tiền tố contracts.id để tránh lỗi mơ hồ (ambiguous) khi JOIN
 	result := query.Offset(offset).Limit(pageSize).Order("contracts.id DESC").Find(&contractList)
 	if result.Error != nil {
 		return nil, result.Error
@@ -49,7 +48,6 @@ func CreateContract(ownerID uint, contract *models.Contract) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var room models.Room
 
-		// KIỂM TRA BẢO MẬT: Phòng này có thuộc về nhà của chủ trọ đang thao tác không?
 		if err := tx.Joins("JOIN houses ON rooms.house_id = houses.id").
 			Where("rooms.id = ? AND houses.owner_id = ?", contract.RoomID, ownerID).
 			First(&room).Error; err != nil {
@@ -83,7 +81,6 @@ func TerminateContract(ownerID uint, contractID uint) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		var contract models.Contract
 
-		// KIỂM TRA BẢO MẬT: Hợp đồng này có nằm trong nhà của chủ trọ đang thao tác không?
 		if err := tx.Joins("JOIN rooms ON contracts.room_id = rooms.id").
 			Joins("JOIN houses ON rooms.house_id = houses.id").
 			Where("contracts.id = ? AND houses.owner_id = ?", contractID, ownerID).

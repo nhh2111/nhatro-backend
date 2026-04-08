@@ -1,0 +1,10 @@
+# CORE CODING PRINCIPLES & GUIDELINES
+- Hãy trả lời bằng tiếng việt có dấu
+- Đây là phần code backend cho ứng dụng web quản lý nhà trọ
+- Clean Code & Reusability: Luôn đảm bảo code sạch, dễ đọc và dễ hiểu. Bắt buộc tách các logic chung, có khả năng tái sử dụng thành các hàm xử lý riêng biệt.
+- Anti-Nested Ifs: Tuyệt đối không sử dụng các câu lệnh `if` lồng nhau sâu. Phải cấu trúc lại bằng cách sử dụng Guard Clauses (return sớm) hoặc trích xuất thành một hàm riêng biệt và return kết quả.
+- Explicit Naming Convention: Tên biến, tên hàm, tên class phải cực kỳ tường minh. Tên gọi phải phản ánh chính xác và rõ ràng tác dụng của nó trong hệ thống.
+- Single Responsibility Principle (SRP): Một hàm hoặc một class chỉ được phép thực hiện duy nhất MỘT việc. Chúng phải làm tốt việc đó, và chỉ làm việc đó mà thôi.
+- Open/Closed Principle (OCP): Hạn chế tối đa việc chỉnh sửa bên trong một class hoặc module đã có sẵn. Thay vào đó, hãy thiết kế để chúng có thể dễ dàng được mở rộng (kế thừa, interface) khi có yêu cầu mới.
+- không comment code
+- không sử dụng các thư viện không cần thiết

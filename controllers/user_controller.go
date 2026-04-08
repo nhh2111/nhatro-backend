@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,8 +16,10 @@ func GetAllUserHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllStaffs(ownerID, page, pageSize, search)
 
@@ -37,81 +38,75 @@ func CreateUserHandler(ginContext *gin.Context) {
 	}
 
 	if errBind := ginContext.ShouldBindJSON(&req); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng nhập email và họ tên hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Vui lòng nhập email và họ tên hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errCreate := services.CreateStaffAccount(ownerID, req.Email, req.FullName)
 	if errCreate != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errCreate.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errCreate.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{"message": "Tạo nhân viên mới thành công. Mật khẩu mặc định là 123456"})
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{"message": "Tạo nhân viên mới thành công. Mật khẩu mặc định là 123456"})
 }
 
 func UpdateUserHandler(ginContext *gin.Context) {
-	userID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID nhân viên không hợp lệ"})
+	userID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID nhân viên không hợp lệ")
 		return
 	}
 
 	var updateData map[string]interface{}
 	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu cập nhật không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.UpdateStaffs(ownerID, uint(userID), updateData)
+	errService := services.UpdateStaffs(ownerID, userID, updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật nhân viên thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật nhân viên thành công"})
 }
 
 func DeleteUserHandler(ginContext *gin.Context) {
-	userID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID nhân viên không hợp lệ"})
+	userID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID nhân viên không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteUser(ownerID, uint(userID))
+	errService := services.DeleteUser(ownerID, userID)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa nhân viên thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa nhân viên thành công"})
 }
 
 func GetMyProfileHandler(c *gin.Context) {
-	userIDValue, exists := c.Get("userID")
-	if !exists {
-		utils.ErrorResponse(c, http.StatusUnauthorized, 401, "Không xác thực được danh tính")
-		return
-	}
-
-	var userID uint
-	switch v := userIDValue.(type) {
-	case float64:
-		userID = uint(v)
-	case uint:
-		userID = v
-	default:
-		utils.ErrorResponse(c, http.StatusInternalServerError, 500, "Lỗi định dạng ID người dùng")
+	userID, ok := utils.RequireUserID(c)
+	if !ok {
 		return
 	}
 
@@ -125,18 +120,9 @@ func GetMyProfileHandler(c *gin.Context) {
 }
 
 func UpdateMyProfileHandler(c *gin.Context) {
-	userIDValue, exists := c.Get("userID")
-	if !exists {
-		utils.ErrorResponse(c, http.StatusUnauthorized, 401, "Không xác thực được danh tính")
+	userID, ok := utils.RequireUserID(c)
+	if !ok {
 		return
-	}
-
-	var userID uint
-	switch v := userIDValue.(type) {
-	case float64:
-		userID = uint(v)
-	case uint:
-		userID = v
 	}
 
 	var updateData map[string]interface{}
@@ -150,20 +136,10 @@ func UpdateMyProfileHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"errorCode":    200,
-		"errorMessage": "Cập nhật thông tin cá nhân thành công",
-		"result":       nil,
-	})
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"message": "Cập nhật thông tin cá nhân thành công"})
 }
 
 func ChangeMyPasswordHandler(c *gin.Context) {
-	userIDValue, exists := c.Get("userID")
-	if !exists {
-		utils.ErrorResponse(c, http.StatusUnauthorized, 401, "Không xác thực được danh tính")
-		return
-	}
-
 	var req struct {
 		OldPassword string `json:"old_password" binding:"required"`
 		NewPassword string `json:"new_password" binding:"required"`
@@ -174,12 +150,9 @@ func ChangeMyPasswordHandler(c *gin.Context) {
 		return
 	}
 
-	var userID uint
-	switch v := userIDValue.(type) {
-	case float64:
-		userID = uint(v)
-	case uint:
-		userID = v
+	userID, ok := utils.RequireUserID(c)
+	if !ok {
+		return
 	}
 
 	if err := services.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {

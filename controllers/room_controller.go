@@ -23,12 +23,10 @@ func GetAllRoomHandler(ginContext *gin.Context) {
 		}
 	}
 
-	ownerIDVal, exists := ginContext.Get("ownerID")
-	if !exists {
-		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính người dùng")
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
-	ownerID := ownerIDVal.(uint)
 
 	resultData, err := services.GetAllRooms(ownerID, page, pageSize, search, houseId)
 	if err != nil {
@@ -44,34 +42,23 @@ func CreateRoomHandler(ginContext *gin.Context) {
 
 	errBind := ginContext.ShouldBindJSON(&newRoom)
 	if errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{
-			"status":  "error",
-			"message": "Dữ liệu đầu vào không hợp lệ",
-			"detail":  errBind.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu đầu vào không hợp lệ: "+errBind.Error())
 		return
 	}
 
-	ownerIDVal, exists := ginContext.Get("ownerID")
-	if !exists {
-		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được danh tính người dùng"})
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
-	ownerID := ownerIDVal.(uint)
 
 	errCreate := services.CreateNewRoom(ownerID, &newRoom)
 	if errCreate != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "Không thể tạo phòng mới",
-			"detail":  errCreate.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Không thể tạo phòng mới: "+errCreate.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Tạo phòng mới thành công",
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{
+		"message": "Tạo phòng mới và gán dịch vụ mặc định thành công",
 		"data":    newRoom,
 	})
 }
@@ -79,43 +66,47 @@ func CreateRoomHandler(ginContext *gin.Context) {
 func UpdateRoomHandler(ginContext *gin.Context) {
 	roomID, errParse := strconv.Atoi(ginContext.Param("id"))
 	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID phòng không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID phòng không hợp lệ")
 		return
 	}
 
 	var updateData map[string]interface{}
 	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu cập nhật không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errService := services.UpdateRoom(ownerID, uint(roomID), updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật phòng thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật phòng thành công"})
 }
 
 func DeleteRoomHandler(ginContext *gin.Context) {
 	roomID, errParse := strconv.Atoi(ginContext.Param("id"))
 	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID phòng không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID phòng không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errService := services.DeleteRoom(ownerID, uint(roomID))
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa phòng thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa phòng thành công"})
 }

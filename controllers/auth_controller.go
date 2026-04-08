@@ -38,7 +38,6 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 
-	// Giải mã Refresh Token
 	secretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
 	token, err := jwt.Parse(req.RefreshToken, func(token *jwt.Token) (interface{}, error) {
 		return secretKey, nil
@@ -55,16 +54,18 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 
-	userID := uint(claims["user_id"].(float64))
+	userID, ok := utils.CoerceUint(claims["user_id"])
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token không hợp lệ"})
+		return
+	}
 
-	// Truy vấn DB để lấy lại Role của User (Vì refresh token của bạn không lưu role)
-	var user models.User // Đảm bảo bạn gọi đúng model tài khoản của bạn (User hoặc Owner)
+	var user models.User
 	if err := config.DB.First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Không tìm thấy người dùng"})
 		return
 	}
 
-	// Gọi hàm GenerateTokens của bạn để cấp cặp khóa mới
 	newAccessToken, newRefreshToken, errToken := utils.GenerateTokens(userID, user.Role)
 	if errToken != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi khi tạo token mới"})
@@ -139,7 +140,6 @@ func LoginHandler(c *gin.Context) {
 	})
 }
 
-// Yêu cầu gửi OTP đổi mật khẩu
 func RequestPasswordResetHandler(c *gin.Context) {
 	var request struct {
 		Email string `json:"email"`
@@ -156,7 +156,6 @@ func RequestPasswordResetHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Mã OTP đã được gửi về email"})
 }
 
-// Xác nhận OTP và đặt mật khẩu mới
 func ConfirmNewPasswordHandler(c *gin.Context) {
 	var request struct {
 		Email       string `json:"email"`

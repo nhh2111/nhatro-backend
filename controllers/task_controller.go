@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,8 +13,10 @@ func GetAllTaskHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	resultData, err := services.GetAllTask(ownerID, page, pageSize, search)
 
@@ -30,54 +31,64 @@ func GetAllTaskHandler(ginContext *gin.Context) {
 func CreateTaskHandler(ginContext *gin.Context) {
 	var newTask models.Task
 	if err := ginContext.ShouldBindJSON(&newTask); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	if err := services.CreateNewTask(ownerID, &newTask); err != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Tạo nhiệm vụ thành công",
-		"data":    newTask,
-	})
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{"message": "Tạo nhiệm vụ thành công", "data": newTask})
 }
 
 func UpdateTaskHandler(ginContext *gin.Context) {
-	taskID, _ := strconv.Atoi(ginContext.Param("id"))
+	taskID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
+		return
+	}
 
 	var updateData map[string]interface{}
 	if err := ginContext.ShouldBindJSON(&updateData); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
-
-	if err := services.UpdateTask(ownerID, uint(taskID), updateData); err != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật thành công"})
+	if err := services.UpdateTask(ownerID, taskID, updateData); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật thành công"})
 }
 
 func DeleteTaskHandler(ginContext *gin.Context) {
-	taskID, _ := strconv.Atoi(ginContext.Param("id"))
-
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
-
-	if err := services.DeleteTask(ownerID, uint(taskID)); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	taskID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
 		return
 	}
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa nhiệm vụ thành công"})
+
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
+
+	if err := services.DeleteTask(ownerID, taskID); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa nhiệm vụ thành công"})
 }

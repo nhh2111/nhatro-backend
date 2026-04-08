@@ -59,14 +59,12 @@ func GenerateInvoice(roomID uint, monthYear string) error {
 			return errors.New("phòng không có hợp đồng nào đang hoạt động")
 		}
 
-		// ĐÃ SỬA LOGIC: Kiểm tra sự tồn tại của hóa đơn dựa trên PHÒNG và THÁNG, thay vì HỢP ĐỒNG và THÁNG
 		var existing models.Invoice
 		tx.Joins("JOIN contracts ON invoices.contract_id = contracts.id").
 			Where("contracts.room_id = ? AND invoices.month_year = ?", roomID, monthYear).
 			First(&existing)
 
 		if existing.ID != 0 {
-			// Đã có hóa đơn cho phòng này trong tháng này rồi -> Bỏ qua không tạo thêm!
 			return nil
 		}
 

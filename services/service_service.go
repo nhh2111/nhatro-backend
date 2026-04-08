@@ -42,7 +42,6 @@ func CreateNewService(newService *models.Service) error {
 func UpdateService(ownerID uint, serviceID uint, updatedData map[string]interface{}) error {
 	var service models.Service
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Where("id = ? AND owner_id = ?", serviceID, ownerID).First(&service).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu dịch vụ hoặc bạn không có quyền sửa")
@@ -58,7 +57,6 @@ func UpdateService(ownerID uint, serviceID uint, updatedData map[string]interfac
 func DeleteService(ownerID uint, serviceID uint) error {
 	var service models.Service
 
-	// KIỂM TRA BẢO MẬT
 	errFind := config.DB.Where("id = ? AND owner_id = ?", serviceID, ownerID).First(&service).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu dịch vụ hoặc bạn không có quyền xóa")

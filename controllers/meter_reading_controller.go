@@ -3,6 +3,7 @@ package controllers
 import (
 	"doAnHTTT_go/dto"
 	"doAnHTTT_go/services"
+	"doAnHTTT_go/utils"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,36 +15,27 @@ func AddMeterReadingHandler(ginContext *gin.Context) {
 	var requestData dto.CreateMeterReadingDTO
 	errBind := ginContext.ShouldBindJSON(&requestData)
 	if errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{
-			"status": "error",
-			"error":  "Dữ liệu gửi lên không đúng định dạng",
-		})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu gửi lên không đúng định dạng")
 		return
 	}
 
-	roleVal, exists := ginContext.Get("userRole")
-	if !exists {
-		ginContext.JSON(http.StatusUnauthorized, gin.H{"error": "Không xác định được quyền người dùng"})
+	userRole, ok := utils.RequireUserRole(ginContext)
+	if !ok {
 		return
 	}
-	userRole := roleVal.(string)
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	errService := services.CreateNewMeterReading(ownerID, requestData, userRole)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{
-			"status": "error",
-			"error":  errService.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Ghi nhận chỉ số điện/nước thành công!",
-	})
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{"message": "Ghi nhận chỉ số điện/nước thành công!"})
 }
 
 func GetMeterReadingsHandler(ginContext *gin.Context) {
@@ -52,49 +44,79 @@ func GetMeterReadingsHandler(ginContext *gin.Context) {
 		month = time.Now().Format("2006-01")
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
 	readings, err := services.GetMeterReadingsByMonth(ownerID, month)
 	if err != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   readings,
-	})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"data": readings})
 }
 
 func UpdateMeterReadingHandler(ginContext *gin.Context) {
-	id, _ := strconv.Atoi(ginContext.Param("id"))
+	id, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
+		return
+	}
 	var requestData dto.CreateMeterReadingDTO
 
 	if err := ginContext.ShouldBindJSON(&requestData); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
-
-	if err := services.UpdateMeterReading(ownerID, uint(id), requestData); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật chỉ số thành công!"})
+
+	if err := services.UpdateMeterReading(ownerID, id, requestData); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật chỉ số thành công!"})
 }
 
 func DeleteMeterReadingHandler(ginContext *gin.Context) {
-	id, _ := strconv.Atoi(ginContext.Param("id"))
-
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
-
-	if err := services.DeleteMeterReading(ownerID, uint(id)); err != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	id, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID không hợp lệ")
 		return
 	}
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa chỉ số thành công!"})
+
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
+
+	if err := services.DeleteMeterReading(ownerID, id); err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa chỉ số thành công!"})
+}
+
+func GetLatestIndexHandler(ginContext *gin.Context) {
+	roomIDStr := ginContext.Query("room_id")
+	serviceIDStr := ginContext.Query("service_id")
+	date := ginContext.Query("date")
+
+	roomID, _ := strconv.ParseUint(roomIDStr, 10, 32)
+	serviceID, _ := strconv.ParseUint(serviceIDStr, 10, 32)
+
+	if roomID == 0 || serviceID == 0 || date == "" {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Thiếu tham số phòng, dịch vụ hoặc ngày ghi")
+		return
+	}
+
+	// Gọi service lấy số
+	oldIndex := services.GetLatestOldIndex(uint(roomID), uint(serviceID), date)
+
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"old_index": oldIndex})
 }

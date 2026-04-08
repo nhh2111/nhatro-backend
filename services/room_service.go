@@ -10,8 +10,6 @@ import (
 func GetAllRooms(ownerID uint, page int, pageSize int, search string, houseId uint) (map[string]interface{}, error) {
 	var roomList []models.Room
 	var totalRecords int64
-
-	// BỘ LỌC ĐA KHÁCH HÀNG KHI ĐẾM (JOIN sang houses để lấy owner_id)
 	countQuery := config.DB.Table("rooms").
 		Joins("JOIN houses ON houses.id = rooms.house_id").
 		Where("houses.owner_id = ?", ownerID)
@@ -25,7 +23,6 @@ func GetAllRooms(ownerID uint, page int, pageSize int, search string, houseId ui
 	}
 	countQuery.Count(&totalRecords)
 
-	// BỘ LỌC ĐA KHÁCH HÀNG KHI LẤY DỮ LIỆU
 	query := config.DB.Table("rooms").
 		Select("rooms.*, COALESCE((SELECT COUNT(id) FROM contracts WHERE contracts.room_id = rooms.id AND contracts.status = 'ACTIVE'), 0) AS current_occupants").
 		Joins("JOIN houses ON houses.id = rooms.house_id").
@@ -33,7 +30,7 @@ func GetAllRooms(ownerID uint, page int, pageSize int, search string, houseId ui
 
 	if search != "" {
 		searchKeyword := "%" + search + "%"
-		query = query.Where("(rooms.room_number LIKE ? OR rooms.description LIKE ?)", searchKeyword, searchKeyword)
+		query = query.Where("(rooms.room_number LIKE ? OR houses.name LIKE ?)", searchKeyword, searchKeyword)
 	}
 	if houseId > 0 {
 		query = query.Where("rooms.house_id = ?", houseId)
@@ -57,17 +54,37 @@ func GetAllRooms(ownerID uint, page int, pageSize int, search string, houseId ui
 }
 
 func CreateNewRoom(ownerID uint, newRoom *models.Room) error {
-	// KIỂM TRA BẢO MẬT: Nhà (HouseID) mà người dùng định thêm phòng vào có thuộc về họ không?
 	var houseCount int64
 	config.DB.Model(&models.House{}).Where("id = ? AND owner_id = ?", newRoom.HouseID, ownerID).Count(&houseCount)
 	if houseCount == 0 {
 		return errors.New("khu trọ không tồn tại hoặc bạn không có quyền thêm phòng vào đây")
 	}
 
-	result := config.DB.Create(newRoom)
-	if result.Error != nil {
-		return result.Error
+	tx := config.DB.Begin()
+
+	if err := tx.Create(newRoom).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
+
+	var defaultServices []models.Service
+
+	tx.Where("owner_id = ? AND name IN (?, ?, ?)", ownerID, "Điện", "Nước", "Rác & Vệ sinh").Find(&defaultServices)
+
+	if len(defaultServices) > 0 {
+		for _, srv := range defaultServices {
+			roomService := models.RoomService{
+				RoomID:    newRoom.ID,
+				ServiceID: srv.ID,
+			}
+			if err := tx.Create(&roomService).Error; err != nil {
+				tx.Rollback()
+				return errors.New("lỗi khi tự động gán dịch vụ cho phòng")
+			}
+		}
+	}
+
+	tx.Commit()
 
 	return nil
 }
@@ -75,7 +92,6 @@ func CreateNewRoom(ownerID uint, newRoom *models.Room) error {
 func UpdateRoom(ownerID uint, roomID uint, updatedData map[string]interface{}) error {
 	var room models.Room
 
-	// KIỂM TRA BẢO MẬT: Phải Join với houses để chắc chắn phòng này thuộc nhà của ownerID
 	errFind := config.DB.Joins("JOIN houses ON houses.id = rooms.house_id").
 		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).
 		First(&room).Error
@@ -83,14 +99,28 @@ func UpdateRoom(ownerID uint, roomID uint, updatedData map[string]interface{}) e
 		return errors.New("không tìm thấy dữ liệu phòng hoặc bạn không có quyền sửa")
 	}
 
-	// Nếu họ cố tình sửa đổi HouseID (Chuyển phòng sang nhà khác), cũng phải kiểm tra nhà mới
 	if newHouseID, ok := updatedData["house_id"]; ok {
 		var houseCount int64
-		// Ép kiểu an toàn (float64 do JSON parse số thành float64)
-		houseIdToFind := uint(newHouseID.(float64))
+		houseIdToFind, ok := utils.CoerceUint(newHouseID)
+		if !ok || houseIdToFind == 0 {
+			return errors.New("khu trọ đích không hợp lệ")
+		}
 		config.DB.Model(&models.House{}).Where("id = ? AND owner_id = ?", houseIdToFind, ownerID).Count(&houseCount)
 		if houseCount == 0 {
 			return errors.New("khu trọ đích không hợp lệ")
+		}
+	}
+
+	if newStatus, ok := updatedData["status"].(string); ok && newStatus != room.Status {
+		if newStatus == "AVAILABLE" || newStatus == "MAINTENANCE" {
+			var activeContractCount int64
+			config.DB.Table("contracts").
+				Where("room_id = ? AND status = 'ACTIVE'", roomID).
+				Count(&activeContractCount)
+
+			if activeContractCount > 0 {
+				return errors.New("không thể đổi trạng thái thành Trống/Bảo trì vì phòng đang có Khách thuê (Hợp đồng đang hiệu lực)")
+			}
 		}
 	}
 
@@ -105,7 +135,6 @@ func UpdateRoom(ownerID uint, roomID uint, updatedData map[string]interface{}) e
 func DeleteRoom(ownerID uint, roomID uint) error {
 	var room models.Room
 
-	// KIỂM TRA BẢO MẬT: Join với houses để chắc chắn quyền xóa
 	errFind := config.DB.Joins("JOIN houses ON houses.id = rooms.house_id").
 		Where("rooms.id = ? AND houses.owner_id = ?", roomID, ownerID).
 		First(&room).Error
@@ -113,7 +142,7 @@ func DeleteRoom(ownerID uint, roomID uint) error {
 		return errors.New("không tìm thấy dữ liệu phòng hoặc bạn không có quyền xóa")
 	}
 
-	if room.Status == "OCCUPIED" {
+	if room.Status == "OCCUPIED" || room.Status == "RENTED" {
 		return errors.New("không thể xóa phòng đang có khách thuê")
 	}
 

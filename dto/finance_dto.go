@@ -2,11 +2,10 @@ package dto
 
 import "time"
 
-// CreateTransactionDTO dùng cho việc tạo Phiếu Thu/Chi thủ công
 type CreateTransactionDTO struct {
 	HouseID         uint      `json:"house_id" binding:"required"`
-	RoomID          uint      `json:"room_id"`                 // Có thể rỗng nếu là chi phí chung của nhà
-	Type            string    `json:"type" binding:"required"` // INCOME hoặc EXPENSE
+	RoomID          uint      `json:"room_id"`
+	Type            string    `json:"type" binding:"required"`
 	Category        string    `json:"category" binding:"required"`
 	Amount          float64   `json:"amount" binding:"required"`
 	TransactionDate time.Time `json:"transaction_date" binding:"required"`
@@ -14,7 +13,6 @@ type CreateTransactionDTO struct {
 	Description     string    `json:"description"`
 }
 
-// PayInvoiceDTO dùng khi khách đóng tiền phòng
 type PayInvoiceDTO struct {
 	InvoiceID   uint    `json:"invoice_id" binding:"required"`
 	Amount      float64 `json:"amount" binding:"required"`

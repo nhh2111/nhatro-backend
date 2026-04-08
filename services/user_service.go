@@ -14,7 +14,6 @@ func GetAllStaffs(employerID uint, page int, pageSize int, search string) (map[s
 	var userList []models.User
 	var totalRecords int64
 
-	// CHẶN: Chỉ lấy nhân viên của Chủ trọ này
 	query := config.DB.Model(&models.User{}).Where("role = ? AND employer_id = ?", "STAFF", employerID)
 	if search != "" {
 		searchKeyword := "%" + search + "%"
@@ -43,7 +42,6 @@ func GetAllStaffs(employerID uint, page int, pageSize int, search string) (map[s
 func UpdateStaffs(employerID uint, userID uint, updatedData map[string]interface{}) error {
 	var user models.User
 
-	// KIỂM TRA: Nhân viên này có thuộc quyền quản lý của chủ trọ không?
 	errFind := config.DB.Where("id = ? AND employer_id = ?", userID, employerID).First(&user).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu nhân viên hoặc bạn không có quyền sửa")
@@ -60,7 +58,6 @@ func UpdateStaffs(employerID uint, userID uint, updatedData map[string]interface
 func DeleteUser(employerID uint, userID uint) error {
 	var user models.User
 
-	// KIỂM TRA: Nhân viên này có thuộc quyền quản lý của chủ trọ không?
 	errFind := config.DB.Where("id = ? AND employer_id = ?", userID, employerID).First(&user).Error
 	if errFind != nil {
 		return errors.New("không tìm thấy dữ liệu nhân viên hoặc bạn không có quyền xóa")
@@ -77,12 +74,10 @@ func DeleteUser(employerID uint, userID uint) error {
 func GetMyProfile(userID uint) (map[string]interface{}, error) {
 	var user models.User
 
-	// Tìm user theo ID
 	if err := config.DB.First(&user, userID).Error; err != nil {
 		return nil, errors.New("không tìm thấy thông tin tài khoản")
 	}
 
-	// Chỉ trả về các trường cần thiết cho Profile (Không trả về PasswordHash)
 	profileData := map[string]interface{}{
 		"id":         user.ID,
 		"full_name":  user.FullName,
@@ -131,7 +126,7 @@ func isValidPassword(password string) bool {
 
 func ChangePassword(userID uint, oldPassword string, newPassword string) error {
 	if !isValidPassword(newPassword) {
-		return errors.New("Mật khẩu mới quá yếu. Yêu cầu tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường và số.")
+		return errors.New("Mật khẩu mới quá yếu. Yêu cầu tối thiểu 8 ký tự, bao gồm chữ hoa, ký tự đặc biệt và số.")
 	}
 
 	var user models.User

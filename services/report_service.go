@@ -10,7 +10,6 @@ func GetProfitLossReport(ownerID uint, month string, year string) (dto.ProfitLos
 	var totalIncome float64
 	var totalExpense float64
 
-	// TÍNH TỔNG THU (Chỉ của chủ trọ hiện tại)
 	errIncome := config.DB.Table("transactions").
 		Joins("JOIN houses ON transactions.house_id = houses.id").
 		Where("houses.owner_id = ? AND transactions.type = ? AND MONTH(transactions.transaction_date) = ? AND YEAR(transactions.transaction_date) = ?", ownerID, "INCOME", month, year).
@@ -20,7 +19,6 @@ func GetProfitLossReport(ownerID uint, month string, year string) (dto.ProfitLos
 		return dto.ProfitLossReportDTO{}, errors.New("lỗi khi thống kê tổng thu")
 	}
 
-	// TÍNH TỔNG CHI (Chỉ của chủ trọ hiện tại)
 	errExpense := config.DB.Table("transactions").
 		Joins("JOIN houses ON transactions.house_id = houses.id").
 		Where("houses.owner_id = ? AND transactions.type = ? AND MONTH(transactions.transaction_date) = ? AND YEAR(transactions.transaction_date) = ?", ownerID, "EXPENSE", month, year).

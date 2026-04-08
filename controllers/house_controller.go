@@ -5,7 +5,6 @@ import (
 	"doAnHTTT_go/services"
 	"doAnHTTT_go/utils"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,12 +13,10 @@ func GetAllHousesHandler(ginContext *gin.Context) {
 	page, pageSize := utils.GetPaginationParams(ginContext)
 	search := ginContext.Query("search")
 
-	ownerIDVal, exists := ginContext.Get("ownerID")
-	if !exists {
-		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính chủ cơ sở")
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
-	ownerID := ownerIDVal.(uint)
 
 	resultData, err := services.GetAllHouses(ownerID, page, pageSize, search)
 	if err != nil {
@@ -35,78 +32,72 @@ func CreateHouseHandler(ginContext *gin.Context) {
 
 	errBind := ginContext.ShouldBindJSON(&newHouse)
 	if errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{
-			"status":  "error",
-			"message": "Dữ liệu đầu vào không hợp lệ",
-			"detail":  errBind.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu đầu vào không hợp lệ: "+errBind.Error())
 		return
 	}
 
-	ownerIDVal, exists := ginContext.Get("ownerID")
-	if !exists {
-		utils.ErrorResponse(ginContext, http.StatusUnauthorized, 401, "Không xác định được danh tính chủ cơ sở")
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
 		return
 	}
-	newHouse.OwnerID = ownerIDVal.(uint)
+	newHouse.OwnerID = ownerID
 
 	errCreate := services.CreateNewHouse(&newHouse)
 	if errCreate != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "Không thể tạo nhà mới",
-			"detail":  errCreate.Error(),
-		})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, "Không thể tạo nhà mới: "+errCreate.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
+	utils.SuccessResponse(ginContext, http.StatusCreated, gin.H{
 		"message": "Tạo nhà mới thành công",
 		"data":    newHouse,
 	})
 }
 
 func UpdateHouseHandler(ginContext *gin.Context) {
-	houseID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID nhà không hợp lệ"})
+	houseID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID nhà không hợp lệ")
 		return
 	}
 
 	var updateData map[string]interface{}
 	if errBind := ginContext.ShouldBindJSON(&updateData); errBind != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu cập nhật không hợp lệ"})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "Dữ liệu cập nhật không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.UpdateHouse(ownerID, uint(houseID), updateData)
+	errService := services.UpdateHouse(ownerID, houseID, updateData)
 	if errService != nil {
-		ginContext.JSON(http.StatusInternalServerError, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusInternalServerError, 500, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Cập nhật nhà thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Cập nhật nhà thành công"})
 }
 
 func DeleteHouseHandler(ginContext *gin.Context) {
-	houseID, errParse := strconv.Atoi(ginContext.Param("id"))
-	if errParse != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": "ID nhà không hợp lệ"})
+	houseID, err := utils.ParseUintParam(ginContext, "id")
+	if err != nil {
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, "ID nhà không hợp lệ")
 		return
 	}
 
-	ownerIDVal, _ := ginContext.Get("ownerID")
-	ownerID := ownerIDVal.(uint)
+	ownerID, ok := utils.RequireOwnerID(ginContext)
+	if !ok {
+		return
+	}
 
-	errService := services.DeleteHouse(ownerID, uint(houseID))
+	errService := services.DeleteHouse(ownerID, houseID)
 	if errService != nil {
-		ginContext.JSON(http.StatusBadRequest, gin.H{"error": errService.Error()})
+		utils.ErrorResponse(ginContext, http.StatusBadRequest, 400, errService.Error())
 		return
 	}
 
-	ginContext.JSON(http.StatusOK, gin.H{"message": "Xóa nhà thành công"})
+	utils.SuccessResponse(ginContext, http.StatusOK, gin.H{"message": "Xóa nhà thành công"})
 }
